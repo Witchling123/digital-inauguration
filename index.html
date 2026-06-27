@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="referrer" content="strict-origin-when-cross-origin" /><!-- helps avoid YouTube embed error 153 (when served over http) -->
+<title>Digital Inauguration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+/* =================================================================
+   BEHAVIOUR CHANGE CONCLAVE — DIGITAL INAUGURATION
+   Single-file ceremonial lamp app · CSBC / BCC 2026 brand
+   ================================================================= */
+:root{
+  --plum:#44113a;
+  --wine:#6d1a3a;
+  --raspberry:#9d1c4a;
+  --magenta:#AC2251;
+  --orange:#E8602C;        /* BCC "Conclave" accent */
+  --orange-soft:#f0853f;
+  --cream:#F3E9EF;
+  --gold:#f4c95a;
+}
+*{box-sizing:border-box;}
+html,body{
+  margin:0;padding:0;width:100%;height:100%;
+  background:#1a0716;color:var(--cream);
+  overflow:hidden;
+  font-family:"Manrope",system-ui,-apple-system,sans-serif;
+  cursor:none;                       /* native cursor hidden — custom matchstick below */
+  user-select:none;-webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  -webkit-font-smoothing:antialiased;
+}
+canvas#scene{
+  position:fixed;inset:0;width:100vw;height:100vh;display:block;
+  image-rendering:auto;
+  z-index:1;transition:opacity .85s ease;
+}
+#vignette{
+  position:fixed;inset:0;z-index:2;pointer-events:none;
+  background:radial-gradient(125% 100% at 50% 40%, rgba(0,0,0,0) 36%, rgba(20,5,16,.40) 76%, rgba(12,3,10,.72) 100%);
+  transition:opacity .85s ease;
+}
+
+/* ---------- UI overlay (text + dots), click-through ---------- */
+#ui{position:fixed;inset:0;z-index:3;pointer-events:none;transition:opacity .85s ease;}
+
+#prompt{
+  position:absolute;left:0;right:0;bottom:14.5vh;text-align:center;
+  font-family:"Manrope";font-weight:600;
+  font-size:2.1vh;letter-spacing:.42em;color:var(--cream);
+  text-transform:uppercase;opacity:0;transition:opacity .6s ease;
+  text-shadow:0 0 18px rgba(243,233,239,.3);padding-left:.42em;
+}
+#prompt.show{opacity:.9;animation:promptPulse 2.6s ease-in-out infinite;}
+@keyframes promptPulse{0%,100%{opacity:.5;}50%{opacity:.95;}}
+
+#dots{
+  position:absolute;left:0;right:0;bottom:6.5vh;display:flex;
+  justify-content:center;gap:2.4vh;
+}
+#dots .dot{
+  width:1.5vh;height:1.5vh;border-radius:50%;
+  background:rgba(243,233,239,.08);
+  border:2px solid rgba(243,233,239,.26);
+  box-shadow:inset 0 0 4px rgba(0,0,0,.4);
+  transition:all .5s cubic-bezier(.2,.9,.25,1);
+}
+#dots .dot.lit{
+  background:radial-gradient(circle at 40% 32%, #fff7cf, var(--gold) 42%, var(--orange) 105%);
+  border-color:rgba(255,231,160,.9);
+  box-shadow:0 0 14px 3px rgba(244,201,90,.7),0 0 30px 7px rgba(232,96,44,.5);
+  transform:scale(1.22);
+}
+
+/* end-reveal */
+#reveal{
+  position:absolute;left:0;right:0;top:57%;transform:translateY(-50%);
+  text-align:center;opacity:0;transition:opacity 1s ease, filter 1s ease;
+  filter:blur(8px);pointer-events:none;padding:0 6vw;
+}
+#reveal .eyebrow{
+  font-family:"Manrope";font-weight:700;
+  font-size:1.8vh;letter-spacing:.5em;color:var(--orange);
+  text-transform:uppercase;margin-bottom:2vh;padding-left:.5em;
+  text-shadow:0 0 16px rgba(232,96,44,.5);
+}
+#reveal .title{
+  font-family:"Manrope";font-weight:800;
+  font-size:6.6vh;line-height:1.04;letter-spacing:-.01em;
+  color:#fff3d8;
+  text-shadow:0 0 22px rgba(244,201,90,.7),0 0 52px rgba(232,96,44,.55),0 0 100px rgba(172,34,81,.4);
+}
+#reveal.show{opacity:1;filter:blur(0);}
+
+/* ---------- YouTube video layer ---------- */
+#video{
+  position:fixed;inset:0;z-index:5;background:#000;
+  opacity:0;pointer-events:none;transition:opacity .85s ease;
+}
+#video iframe,#video #ytplayer,#video #localvideo{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;object-fit:contain;}
+body.to-video #scene,body.to-video #vignette,body.to-video #ui{opacity:0;}
+body.to-video #video{opacity:1;pointer-events:auto;}
+
+/* click-to-play fallback */
+#clicktoplay{
+  position:fixed;inset:0;z-index:6;display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:3vh;
+  background:radial-gradient(120% 120% at 50% 50%, rgba(110,26,58,.6), rgba(20,5,16,.94));
+  cursor:none;
+}
+#clicktoplay.show{display:flex;}
+#clicktoplay .play{
+  font-family:"Manrope";font-weight:700;font-size:2.8vh;color:#fff3d8;
+  letter-spacing:.16em;text-transform:uppercase;text-shadow:0 0 22px rgba(244,201,90,.7);
+  animation:promptPulse 1.6s ease-in-out infinite;
+}
+#clicktoplay .tri{
+  width:0;height:0;border-style:solid;border-width:4.5vh 0 4.5vh 7.5vh;
+  border-color:transparent transparent transparent #fff3d8;
+  filter:drop-shadow(0 0 20px rgba(232,96,44,.7));
+}
+
+/* ---------- START GATE ---------- */
+#gate{
+  position:fixed;inset:0;z-index:8;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;
+  text-align:center;padding:6vh 6vw;
+  background:
+    radial-gradient(135% 115% at 50% 34%, rgba(110,26,58,.42) 0%, rgba(40,12,34,.84) 56%, rgba(14,4,12,.96) 100%);
+  transition:opacity .8s ease;cursor:none;
+}
+#gate.hide{opacity:0;pointer-events:none;}
+#gate .kicker{
+  font-family:"Manrope";font-weight:700;
+  font-size:1.7vh;letter-spacing:.55em;text-transform:uppercase;
+  color:var(--orange);opacity:.95;margin-bottom:3vh;padding-left:.55em;
+  text-shadow:0 0 18px rgba(232,96,44,.4);
+}
+#gate .event{
+  font-family:"Manrope";font-weight:800;line-height:1.0;letter-spacing:-.02em;
+  font-size:8.2vh;max-width:18ch;margin:0 auto;
+}
+#gate .event .ev-cream{color:#fbf3ec;text-shadow:0 0 30px rgba(251,243,236,.18);}
+#gate .event .ev-orange{color:var(--orange);text-shadow:0 0 30px rgba(232,96,44,.45);}
+#gate .subtitle{
+  margin-top:2.2vh;font-family:"Manrope";font-weight:400;font-style:italic;
+  font-size:2.3vh;letter-spacing:.01em;color:var(--cream);opacity:.78;max-width:34ch;
+}
+#gate .divider{
+  width:8vh;height:3px;margin:4vh auto 3.4vh;
+  background:linear-gradient(90deg,transparent,var(--orange),transparent);opacity:.8;
+}
+#gate .ilabel{
+  font-family:"Manrope";font-weight:700;font-size:1.5vh;letter-spacing:.5em;
+  text-transform:uppercase;color:var(--orange);opacity:.9;margin-bottom:1.4vh;padding-left:.5em;
+}
+#gate .initiative{
+  font-family:"Manrope";font-weight:700;font-size:3.6vh;line-height:1.12;
+  color:var(--cream);max-width:20ch;text-shadow:0 0 22px rgba(172,34,81,.4);
+}
+#gate .tap{
+  margin-top:6vh;display:inline-flex;align-items:center;gap:1.2vh;
+  font-family:"Manrope";font-weight:700;
+  font-size:2.4vh;letter-spacing:.14em;text-transform:uppercase;
+  color:#fff;background:linear-gradient(135deg,var(--orange) 0%,var(--magenta) 100%);
+  padding:1.9vh 4.6vh;border-radius:999px;
+  box-shadow:0 0 34px 4px rgba(232,96,44,.45),0 0 70px 12px rgba(172,34,81,.32);
+  animation:tapPulse 2s ease-in-out infinite;
+}
+#gate .tap .glyph{font-size:1.7vh;opacity:.95;}
+@keyframes tapPulse{
+  0%,100%{transform:translateY(0) scale(1);box-shadow:0 0 26px 3px rgba(232,96,44,.4),0 0 56px 10px rgba(172,34,81,.28);}
+  50%{transform:translateY(-.4vh) scale(1.035);box-shadow:0 0 42px 7px rgba(232,96,44,.62),0 0 90px 16px rgba(172,34,81,.42);}
+}
+#gate .legend{
+  position:absolute;bottom:3vh;left:0;right:0;text-align:center;
+  font-family:"Manrope";font-weight:500;font-size:1.4vh;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--cream);opacity:.3;
+}
+
+/* ---------- CUSTOM CURSOR: matchstick with flame ---------- */
+#cursor{
+  position:fixed;top:0;left:0;z-index:9;pointer-events:none;
+  width:80px;height:100px;margin:-3px 0 0 -40px;   /* flame tip ≈ pointer */
+  will-change:transform;
+}
+#cursor .cglow{
+  position:absolute;left:50%;top:14px;width:74px;height:74px;margin:-37px 0 0 -37px;
+  background:radial-gradient(circle,rgba(255,205,100,.55) 0%,rgba(232,96,44,.28) 40%,rgba(172,34,81,0) 72%);
+  animation:cglow 1.7s ease-in-out infinite;
+}
+#cursor .flame{
+  position:absolute;left:50%;top:2px;width:17px;height:27px;margin-left:-8.5px;
+  background:linear-gradient(#ffe9a0 0%,#ffc23e 42%,#ff8a1e 72%,#e8602c 100%);
+  clip-path:polygon(50% 0%,70% 28%,80% 60%,60% 100%,40% 100%,20% 60%,30% 28%);
+  box-shadow:0 0 18px 5px rgba(232,96,44,.55);
+  transform-origin:50% 100%;
+  animation:flick .26s ease-in-out infinite alternate;
+}
+#cursor .flame .core{
+  position:absolute;inset:0;
+  background:linear-gradient(#fffdf2 0%,#ffe28a 55%,rgba(255,210,80,0) 100%);
+  clip-path:polygon(50% 16%,64% 38%,70% 62%,56% 90%,44% 90%,30% 62%,36% 38%);
+}
+#cursor .head{
+  position:absolute;left:50%;top:23px;width:10px;height:12px;margin-left:-5px;
+  background:radial-gradient(circle at 38% 32%,#c64a32,#6e1820);border-radius:48% 48% 50% 50%;
+  box-shadow:0 1px 2px rgba(0,0,0,.5);
+}
+#cursor .stick{
+  position:absolute;left:50%;top:30px;width:5px;height:60px;margin-left:-2px;
+  background:linear-gradient(90deg,#6e441c 0%,#c79a57 48%,#e7c98c 56%,#6e441c 100%);
+  border-radius:3px;transform-origin:50% 0;transform:rotate(9deg);
+  box-shadow:1px 1px 3px rgba(0,0,0,.45);
+}
+@keyframes flick{
+  0%{transform:scaleY(.94) scaleX(1.02) skewX(-2deg);}
+  100%{transform:scaleY(1.07) scaleX(.97) skewX(2deg);}
+}
+@keyframes cglow{0%,100%{opacity:.7;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+
+  <div id="ui">
+    <div id="prompt">Light the lamp</div>
+    <div id="reveal">
+      <div class="eyebrow">Now Inaugurated</div>
+      <div class="title" id="revealTitle">Initiative</div>
+    </div>
+    <div id="dots"></div>
+  </div>
+
+  <div id="video"><video id="localvideo" playsinline></video><div id="ytplayer"></div></div>
+
+  <div id="clicktoplay">
+    <div class="tri"></div>
+    <div class="play">Click to play</div>
+  </div>
+
+  <div id="gate">
+    <div class="kicker">Digital Inauguration</div>
+    <div class="event" id="gateEvent">Event</div>
+    <div class="subtitle" id="gateSubtitle"></div>
+    <div class="divider"></div>
+    <div class="ilabel">Inaugurating</div>
+    <div class="initiative" id="gateInitiative">Initiative</div>
+    <div class="tap"><span class="glyph">●</span> Tap to begin</div>
+    <div class="legend">Click / Space · R reset · V video · M mute</div>
+  </div>
+
+  <div id="cursor">
+    <div class="cglow"></div>
+    <div class="stick"></div>
+    <div class="head"></div>
+    <div class="flame"><div class="core"></div></div>
+  </div>
+
+<script>
+/* =======================================================================
+   ============================  CONFIG  =================================
+   ===== TODO: confirm / swap these before the live event ================
+   ======================================================================= */
+var CONFIG = {
+  INITIATIVE_NAME : "AI, Behaviour, and Impact Accelerator",
+  EVENT_NAME      : "Behaviour Change Conclave",        // brand lockup — last word renders in BCC orange
+  EVENT_SUBTITLE  : "Behaviour in the age of Human and Machine Intelligence",
+  EVENT_DATE      : "30 June 2026 · Jacaranda Hall, New Delhi",  // shown faintly (optional flavour)
+  /* MOST RELIABLE for the live event: download the inauguration video as an .mp4,
+     put it next to index.html, and set its filename here (e.g. "inauguration.mp4").
+     A local file plays offline, needs no network, and avoids YouTube's file://
+     embed error (153). Leave "" to use the YouTube fallback below.            */
+  LOCAL_VIDEO_SRC : "",
+  YOUTUBE_ID      : "0JLcRsz7H0Q",                      // https://youtu.be/0JLcRsz7H0Q
+  /* NOTE: YouTube embeds are BLOCKED when opening this file directly (file://) —
+     that causes "error 153". To use YouTube you MUST serve over http, e.g. run
+     `python -m http.server` in this folder and open http://localhost:8000 .     */
+  WICK_COUNT      : 5,
+  SPIN_DURATION   : 2400,   // ms — celebratory spin
+  HOLD_DURATION   : 3000,   // ms — beat on the "all lit" moment before video
+  TURNS           : 2       // full rotations during the spin (integer => ends upright)
+};
+/* Do NOT hardcode stakeholder names. Five wicks, five dots, no names on screen. */
+
+/* ----- inject config text into DOM ----- */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+(function(){
+  var ev = CONFIG.EVENT_NAME.trim();
+  var parts = ev.split(/\s+/);
+  var last = parts.length>1 ? parts.pop() : '';
+  var head = parts.join(' ');
+  document.getElementById('gateEvent').innerHTML =
+    '<span class="ev-cream">'+esc(head)+'</span>' + (last? ' <span class="ev-orange">'+esc(last)+'</span>' : '');
+  document.getElementById('gateSubtitle').textContent  = CONFIG.EVENT_SUBTITLE;
+  document.getElementById('gateInitiative').textContent= CONFIG.INITIATIVE_NAME;
+  document.getElementById('revealTitle').textContent   = CONFIG.INITIATIVE_NAME;
+  document.title = CONFIG.EVENT_NAME + " — Digital Inauguration";
+})();
+
+/* =======================================================================
+   ============================  STATE  ==================================
+   ======================================================================= */
+var STATE = 'gate';           // gate | lighting | spin | hold | video | end
+var litCount = 0, muted = false;
+var spinStart = 0, holdStart = 0;
+var now = (typeof performance!=='undefined' && performance.now) ? function(){return performance.now();} : function(){return +new Date();};
+
+/* =======================================================================
+   ========================  CANVAS / RENDER  ============================
+   ======================================================================= */
+var canvas = document.getElementById('scene');
+var ctx = canvas.getContext('2d');
+var W=0, H=0, DPR=1;
+
+function resize(){
+  DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  buildStars();
+}
+window.addEventListener('resize', resize);
+
+function lampMetrics(){
+  var p = Math.min(H*0.86/45, W*0.92/31);
+  var ax = W/2;
+  var ay = H*0.92 - 30*p;     // anchor = oil-bowl rim centre (local 0,0)
+  return {p:p, ax:ax, ay:ay};
+}
+/* 5 wick positions across the oil-bowl rim (local grid-x) + wick-tip height.
+   A traditional standing samai / kuthuvilakku: tiered base, knobbed stem,
+   shallow oil well with five wicks, lotus-bud crown. (Profile in CP, below.) */
+var SPOUTS = [-13,-6.5,0,6.5,13];
+var FLAME_BASE = -3.2;
+
+/* ---------- ambient: stars + embers ---------- */
+var stars=[], embers=[];
+function rnd(a,b){return a+Math.random()*(b-a);}
+function buildStars(){
+  stars=[];
+  var n=Math.round((W*H)/16000);
+  for(var i=0;i<n;i++) stars.push({x:rnd(0,W),y:rnd(0,H*0.82),s:rnd(0.5,1.7),a:rnd(0.12,0.55),tw:rnd(0,6.28),sp:rnd(0.4,1.3)});
+  embers=[];
+  for(var j=0;j<16;j++) embers.push({x:rnd(0,W),y:rnd(H*0.15,H*0.92),vx:rnd(-7,7),vy:rnd(-9,3),ph:rnd(0,6.28),r:rnd(1.3,2.5)});
+}
+
+/* ---------- particles + rings ---------- */
+var particles=[], rings=[];
+function spawnBurst(idx){
+  var m=lampMetrics();
+  var sx=m.ax+SPOUTS[idx]*m.p, sy=m.ay+FLAME_BASE*m.p;
+  var cols=['#fff7cf','#ffd24a','#ff8a1e','#e8602c','#AC2251','#F3E9EF'];
+  for(var i=0;i<28;i++){
+    var ang=rnd(-Math.PI,0), spd=rnd(40,185);
+    particles.push({x:sx,y:sy,vx:Math.cos(ang)*spd*rnd(0.6,1.2),vy:Math.sin(ang)*spd-rnd(20,95),
+      life:0,max:rnd(0.6,1.3),size:m.p*rnd(0.16,0.4),col:cols[(Math.random()*cols.length)|0],g:rnd(110,250)});
+  }
+  rings.push({x:sx,y:sy,life:0,max:0.7,r0:m.p*0.6,r1:m.p*7.5});
+}
+function spawnFlourish(){
+  var m=lampMetrics(), cx=m.ax, cy=m.ay+14*m.p;
+  var cols=['#fff7cf','#ffd24a','#ff8a1e','#e8602c','#AC2251','#9d1c4a','#F3E9EF'];
+  for(var i=0;i<140;i++){
+    var ang=rnd(0,6.2832), spd=rnd(120,480);
+    particles.push({x:cx,y:cy,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd-50,
+      life:0,max:rnd(0.9,1.9),size:m.p*rnd(0.15,0.48),col:cols[(Math.random()*cols.length)|0],g:rnd(50,150)});
+  }
+  rings.push({x:cx,y:cy-3*m.p,life:0,max:1.4,r0:m.p*1,r1:Math.max(W,H)*0.55});
+}
+function updateParticles(dt){
+  for(var i=particles.length-1;i>=0;i--){var p=particles[i];p.life+=dt;
+    if(p.life>=p.max){particles.splice(i,1);continue;}
+    p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;}
+  for(var r=rings.length-1;r>=0;r--){rings[r].life+=dt; if(rings[r].life>=rings[r].max) rings.splice(r,1);}
+}
+function drawParticles(){
+  ctx.globalCompositeOperation='lighter';
+  for(var i=0;i<particles.length;i++){var p=particles[i];var k=1-p.life/p.max;
+    ctx.globalAlpha=Math.max(0,k);var s=Math.max(1,p.size*(0.55+0.45*k));
+    ctx.fillStyle=p.col;ctx.fillRect(Math.round(p.x),Math.round(p.y),Math.ceil(s),Math.ceil(s));}
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+}
+function drawRings(){
+  ctx.globalCompositeOperation='lighter';
+  for(var i=0;i<rings.length;i++){var rg=rings[i];var k=rg.life/rg.max;var e=1-Math.pow(1-k,3);
+    var rad=rg.r0+(rg.r1-rg.r0)*e;
+    ctx.globalAlpha=Math.max(0,0.5*(1-k));
+    ctx.strokeStyle='rgba(255,205,110,1)';ctx.lineWidth=Math.max(1.5,rg.r1*0.012*(1-k)+1.5);
+    ctx.beginPath();ctx.arc(rg.x,rg.y,rad,0,6.2832);ctx.stroke();}
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+}
+
+/* ---------- confetti (fires when the lamp spins) ---------- */
+var confetti=[];
+var CONFETTI_COLS=['#E8602C','#AC2251','#9d1c4a','#f4c95a','#F3E9EF','#ffd24a','#7A1C3E'];
+function mkConfetti(x,y,vx,vy){
+  return {x:x,y:y,vx:vx,vy:vy,rot:rnd(0,6.2832),vr:rnd(-9,9),
+    w:rnd(7,14),h:rnd(9,19),col:CONFETTI_COLS[(Math.random()*CONFETTI_COLS.length)|0],
+    life:0,max:rnd(3.8,6.2),fp:rnd(0,6.2832),fa:rnd(1.6,3.6)};
+}
+function spawnConfetti(){
+  var m=lampMetrics(), cx=m.ax, cy=m.ay+2*m.p;
+  for(var i=0;i<150;i++){                 // celebratory burst from the lamp
+    var ang=-Math.PI/2+rnd(-1.15,1.15), spd=rnd(280,720);
+    confetti.push(mkConfetti(cx+rnd(-22,22), cy, Math.cos(ang)*spd, Math.sin(ang)*spd-rnd(0,120)));
+  }
+  for(var j=0;j<110;j++)                   // plus a rain from the top
+    confetti.push(mkConfetti(rnd(0,W), rnd(-H*0.4,-10), rnd(-50,50), rnd(70,200)));
+}
+function updateConfetti(dt){
+  for(var i=confetti.length-1;i>=0;i--){var c=confetti[i];c.life+=dt;
+    if(c.life>=c.max || c.y>H+50){confetti.splice(i,1);continue;}
+    c.vy+=560*dt; c.vx*=0.992;
+    c.x+=(c.vx+Math.sin(c.life*c.fa+c.fp)*42)*dt; c.y+=c.vy*dt; c.rot+=c.vr*dt;}
+}
+function drawConfetti(){
+  for(var i=0;i<confetti.length;i++){var c=confetti[i];var k=c.life/c.max;
+    ctx.globalAlpha=k>0.82?Math.max(0,1-(k-0.82)/0.18):1;
+    ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);ctx.fillStyle=c.col;
+    var flut=Math.abs(Math.cos(c.life*c.fa+c.fp));      // paper flip
+    ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h*(0.35+0.65*flut));
+    ctx.restore();}
+  ctx.globalAlpha=1;
+}
+
+/* =======================================================================
+   ========================  DRAW HELPERS  ===============================
+   ======================================================================= */
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),Math.ceil(w),Math.ceil(h));}
+
+/* brand backdrop: diagonal plum→raspberry + darkening + faint CSBC chevron mark */
+function drawBackdrop(t){
+  var g=ctx.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,'#4a123c');
+  g.addColorStop(0.45,'#7a1c46');
+  g.addColorStop(0.72,'#8e1a46');
+  g.addColorStop(1,'#33102a');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // soft brighter bloom upper area (brand warmth)
+  ctx.globalCompositeOperation='lighter';
+  var rg=ctx.createRadialGradient(W*0.5,H*0.18,0,W*0.5,H*0.18,H*0.9);
+  rg.addColorStop(0,'rgba(180,40,90,0.18)');rg.addColorStop(1,'rgba(180,40,90,0)');
+  ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='source-over';
+  // bottom darkening so the flame glow reads
+  var dg=ctx.createRadialGradient(W*0.5,H*0.92,0,W*0.5,H*0.92,Math.max(W,H)*0.8);
+  dg.addColorStop(0,'rgba(12,3,10,0.55)');dg.addColorStop(0.6,'rgba(12,3,10,0.18)');dg.addColorStop(1,'rgba(12,3,10,0)');
+  ctx.fillStyle=dg;ctx.fillRect(0,0,W,H);
+  drawBrandMark(t);
+}
+/* faint flowing CSBC-style bracket/chevron watermark */
+function drawBrandMark(t){
+  var cy=H*0.5, half=H*0.30, drift=Math.sin(t*0.25)*5;
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  var baseX=W*0.74;
+  var defs=[[-half*0.62,0.046,half*0.16],[0,0.05,half*0.15],[half*0.62,0.044,half*0.14]];
+  for(var i=0;i<defs.length;i++){
+    var ox=defs[i][0], a=defs[i][1], lw=defs[i][2];
+    ctx.strokeStyle='rgba(243,233,239,'+a+')';ctx.lineWidth=lw;
+    ctx.beginPath();
+    ctx.moveTo(baseX+ox-half*0.42, cy-half+drift);
+    ctx.quadraticCurveTo(baseX+ox+half*0.5, cy, baseX+ox-half*0.42, cy+half+drift);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ===================  PIXEL-ART SAMAI LAMP  ===================
+   The brass body is rasterised ONCE into a low-res offscreen sprite
+   from a turned profile, then scaled up nearest-neighbour for crisp,
+   intentional 8-bit pixels. Flames + sparks are pixel blocks too.   */
+var RES=2, U_TOP=-15, U_BOT=30, SW=0, SH=0, SCX=0, lampSprite=null;
+/* single-valued silhouette [unit-y, half-width], top -> bottom (incl. finial) */
+var CP=[
+  [-15,0.4],[-14.3,1.1],[-13.4,2.0],[-12.7,2.2],[-11.9,2.1],[-11.1,1.5],[-10.6,1.1], /* lotus bud */
+  [-10.2,0.5],[-1.7,0.5],                                                            /* stalk */
+  [-1.4,13.5],[-0.6,13.9],[0.3,13.1],[1.4,11.0],[2.6,8.0],[3.7,5.0],[4.5,3.0],        /* oil bowl */
+  [4.8,2.1],[5.2,3.0],[5.7,2.0],[6.0,1.5],                                            /* collar */
+  [8.0,1.3],[8.6,2.4],[9.3,1.3],[9.7,1.2],[12.5,1.2],                                 /* upper stem + knob */
+  [13.0,3.0],[13.9,3.4],[14.8,3.0],[15.3,1.2],                                        /* centre bulb */
+  [18.5,1.3],[19.2,2.6],[19.9,1.4],[20.3,1.7],                                        /* lower stem + knob */
+  [21.3,3.4],[22.4,5.2],[23.6,7.0],[24.9,8.8],[26.2,10.6],[27.4,12.4],[28.3,13.8],[28.8,14.7],[29.5,14.9],[29.9,13.6],[30.0,11.0] /* tiered base */
+];
+var PAL={K:'#2c1906',d:'#774710',m:'#aa7826',b:'#e0b54c',h:'#ffe7a0',o:'#221305',ow:'#553715',wk:'#180d07'};
+var FLAMEP=["..3..",".232.",".232.","12321","12221","11211",".111."];
+function halfWidthAt(uy){
+  if(uy<CP[0][0]||uy>CP[CP.length-1][0])return 0;
+  for(var i=1;i<CP.length;i++){if(uy<=CP[i][0]){var a=CP[i-1],b=CP[i];var tt=(uy-a[0])/((b[0]-a[0])||1);return a[1]+(b[1]-a[1])*tt;}}
+  return 0;
+}
+function uyToSy(uy){return Math.round((uy-U_TOP)*RES);}
+function shadeBrass(r,sx,sy){          /* lit from upper-left; dithered transitions */
+  var ar=r<0?-r:r, d2=((sx+sy)&1);
+  if(ar>=0.84)return PAL.K;
+  if(r>=0.5)  return d2?PAL.d:PAL.m;
+  if(r>=0.22) return PAL.m;
+  if(r>=-0.06)return PAL.b;
+  if(r>=-0.34)return d2?PAL.h:PAL.b;   /* specular glint */
+  if(r>=-0.62)return PAL.b;
+  return d2?PAL.m:PAL.d;
+}
+function buildLampSprite(){
+  SH=Math.round((U_BOT-U_TOP)*RES);
+  var maxHalf=0,i; for(i=0;i<CP.length;i++) if(CP[i][1]>maxHalf)maxHalf=CP[i][1];
+  SW=Math.round(maxHalf*2*RES)+4; SCX=Math.round(SW/2);
+  lampSprite=document.createElement('canvas'); lampSprite.width=SW; lampSprite.height=SH;
+  var L=lampSprite.getContext('2d');
+  for(var sy=0;sy<SH;sy++){
+    var uy=U_TOP+(sy+0.5)/RES, hw=halfWidthAt(uy); if(hw<=0)continue;
+    var inBowl=(uy>=-1.4&&uy<=2.6), rimIn=hw*0.72;
+    for(var sx=0;sx<SW;sx++){
+      var ux=(sx+0.5-SCX)/RES; if(ux<-hw||ux>hw)continue;
+      var col;
+      if(inBowl && uy<=1.6 && ux>-rimIn && ux<rimIn){               /* carve oil well */
+        col=(uy<-0.1 && ux>-rimIn*0.85 && ux<rimIn*0.85)?PAL.o:PAL.ow;
+        if(((sx+sy)&1)===0 && ux<0 && uy<0.4) col=PAL.d;            /* oil sheen */
+      } else col=shadeBrass(ux/hw,sx,sy);
+      L.fillStyle=col; L.fillRect(sx,sy,1,1);
+    }
+  }
+  for(var w=0;w<SPOUTS.length;w++){                                  /* wick nubs + dark wicks */
+    var nx=Math.round(SCX+SPOUTS[w]*RES), y0=uyToSy(-2.6),y1=uyToSy(-1.2),yy;
+    for(yy=y0;yy<y1;yy++){ L.fillStyle=PAL.m; L.fillRect(nx-1,yy,1,1); L.fillStyle=PAL.b; L.fillRect(nx,yy,1,1); }
+    var w0=uyToSy(-3.8),w1=uyToSy(-2.6);
+    for(yy=w0;yy<w1;yy++){ L.fillStyle=PAL.wk; L.fillRect(nx,yy,1,1); }
+  }
+}
+
+/* draw the lamp sprite (caller already translated to anchor / rotated); p = unit size */
+function drawLamp(p){
+  if(!lampSprite) buildLampSprite();
+  var ppx=p/RES;
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(lampSprite, -SCX*ppx, U_TOP*p, SW*ppx, SH*ppx);
+  ctx.imageSmoothingEnabled=true;
+  // warm lit-glow wash over the brass, grows with each flame (smooth additive — torchlight)
+  var litK=litCount/CONFIG.WICK_COUNT;
+  if(litK>0){
+    ctx.globalCompositeOperation='lighter';
+    var rw=ctx.createRadialGradient(0,-1*p,0,0,-1*p,16*p);
+    rw.addColorStop(0,'rgba(255,170,70,'+(0.20*litK)+')');rw.addColorStop(1,'rgba(255,170,70,0)');
+    ctx.fillStyle=rw;ctx.fillRect(-16*p,-5*p,32*p,12*p);
+    ctx.globalCompositeOperation='source-over';
+  }
+}
+
+function fillPix(sx,sy,ppx,p,col){ ctx.fillStyle=col; ctx.fillRect((sx-SCX)*ppx, U_TOP*p+sy*ppx, ppx, ppx); }
+
+/* chunky pixel flame rising from a wick, with a smooth torch glow behind it */
+function drawFlamePix(s,t,seed,p,ppx){
+  var bx=SCX+s*RES, byBase=uyToSy(-2.8);
+  var fl=Math.sin(t*8+seed), fl2=Math.sin(t*5.3+seed*1.7);
+  var sway=fl*0.6+Math.sin(t*11+seed*2.1)*0.3;
+  var tall=fl>0.45?1:(fl<-0.5?-1:0);
+  // soft glow (smooth — Terraria torchlight)
+  var lx=(bx-SCX)*ppx, ly=U_TOP*p+(byBase-3)*ppx;
+  ctx.globalCompositeOperation='lighter';
+  var gr=ppx*7.5*(0.9+0.12*fl2);
+  var gg=ctx.createRadialGradient(lx,ly,0,lx,ly,gr);
+  gg.addColorStop(0,'rgba(255,238,180,0.62)');gg.addColorStop(0.4,'rgba(255,150,50,0.32)');gg.addColorStop(1,'rgba(232,96,44,0)');
+  ctx.fillStyle=gg;ctx.beginPath();ctx.arc(lx,ly,gr,0,6.2832);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  // pixel flame body
+  var rows=FLAMEP.length, bright=fl2>0;
+  for(var ri=0;ri<rows;ri++){
+    if(tall<0 && ri===0) continue;                       // shorter flicker frame
+    var line=FLAMEP[ri], up=(rows-1-ri)/(rows-1);
+    var sy=byBase-(rows-ri), dx=Math.round(sway*up*2);
+    for(var ci=0;ci<line.length;ci++){var ch=line.charAt(ci);if(ch==='.')continue;
+      var col=ch==='3'?(bright?'#fffefa':'#fff3c0'):(ch==='2'?'#ffd24a':'#ff8a1e');
+      fillPix(bx+(ci-2)+dx, sy, ppx, p, col);}
+  }
+  if(tall>0) fillPix(bx+Math.round(sway*2), byBase-rows-1, ppx, p, bright?'#fffefa':'#fff3c0'); // taller tip
+}
+
+function drawLampGlow(m,extra){
+  var litK=litCount/CONFIG.WICK_COUNT, amp=0.18+0.82*litK+(extra||0);
+  if(amp<=0.01)return;
+  var cx=m.ax, cy=m.ay-1*m.p, rad=m.p*(10+27*litK)+(extra||0)*m.p*42;
+  ctx.globalCompositeOperation='lighter';
+  var g=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+  g.addColorStop(0,'rgba(255,231,160,'+(0.42*amp)+')');
+  g.addColorStop(0.34,'rgba(244,180,80,'+(0.26*amp)+')');
+  g.addColorStop(0.68,'rgba(232,96,44,'+(0.15*amp)+')');
+  g.addColorStop(1,'rgba(172,34,81,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,rad,0,6.2832);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+}
+/* warm floor pool beneath the lamp */
+function drawFloorPool(m,extra){
+  var litK=litCount/CONFIG.WICK_COUNT, amp=0.12+0.7*litK+(extra||0)*0.5;
+  if(amp<=0.01)return;
+  var cx=m.ax, cy=m.ay+30*m.p, rx=m.p*(17+9*litK), ry=m.p*(2.6+1.6*litK);
+  ctx.globalCompositeOperation='lighter';
+  ctx.save();ctx.translate(cx,cy);ctx.scale(1,ry/rx);
+  var g=ctx.createRadialGradient(0,0,0,0,0,rx);
+  g.addColorStop(0,'rgba(255,180,80,'+(0.32*amp)+')');
+  g.addColorStop(0.5,'rgba(232,96,44,'+(0.16*amp)+')');
+  g.addColorStop(1,'rgba(172,34,81,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,rx,0,6.2832);ctx.fill();
+  ctx.restore();ctx.globalCompositeOperation='source-over';
+}
+
+/* =======================================================================
+   ===========================  MAIN LOOP  ===============================
+   ======================================================================= */
+var lastT=now();
+function frame(){
+  var tNow=now(), dt=Math.min(0.05,(tNow-lastT)/1000); lastT=tNow; var t=tNow/1000;
+
+  if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;} }
+  else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){enterVideo();} }
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  drawBackdrop(t);
+
+  // stars
+  for(var i=0;i<stars.length;i++){var st=stars[i];
+    ctx.globalAlpha=st.a*(0.5+0.5*Math.sin(t*st.sp+st.tw));
+    ctx.fillStyle=(i%6===0)?'#fff0e6':'#e7b9c8';
+    ctx.fillRect(st.x,st.y,st.s,st.s);}
+  ctx.globalAlpha=1;
+
+  // embers
+  ctx.globalCompositeOperation='lighter';
+  for(var f=0;f<embers.length;f++){var fl=embers[f];
+    fl.x+=fl.vx*dt;fl.y+=fl.vy*dt;fl.vx+=rnd(-6,6)*dt;fl.vy+=rnd(-5,3)*dt;
+    fl.vx=Math.max(-12,Math.min(12,fl.vx));fl.vy=Math.max(-14,Math.min(6,fl.vy));
+    if(fl.x<-20)fl.x=W+20;if(fl.x>W+20)fl.x=-20;if(fl.y<-20)fl.y=H+20;if(fl.y>H+20)fl.y=-20;
+    var pulse=0.4+0.6*Math.abs(Math.sin(t*1.3+fl.ph));var gr=fl.r*7;
+    var gg=ctx.createRadialGradient(fl.x,fl.y,0,fl.x,fl.y,gr);
+    gg.addColorStop(0,'rgba(255,200,120,'+(0.5*pulse)+')');gg.addColorStop(1,'rgba(255,150,70,0)');
+    ctx.fillStyle=gg;ctx.beginPath();ctx.arc(fl.x,fl.y,gr,0,6.2832);ctx.fill();
+    ctx.fillStyle='rgba(255,225,170,'+pulse+')';ctx.fillRect(fl.x-1,fl.y-1,2,2);}
+  ctx.globalCompositeOperation='source-over';
+
+  var m=lampMetrics(), p=m.p;
+  var bloom=0;
+  if(STATE==='spin'){var st2=(tNow-spinStart)/CONFIG.SPIN_DURATION;bloom=Math.sin(Math.min(1,st2)*Math.PI)*0.9;}
+  else if(STATE==='hold'||STATE==='end'){bloom=0.25;}
+
+  drawFloorPool(m,bloom);
+  drawLampGlow(m,bloom);
+
+  ctx.save();ctx.translate(m.ax,m.ay);
+  if(STATE==='spin'){
+    var stt=Math.min(1,(tNow-spinStart)/CONFIG.SPIN_DURATION), e=easeInOutCubic(stt);
+    var ang=e*CONFIG.TURNS*6.2832, sc=1+0.10*Math.sin(stt*Math.PI), pivY=14*p;
+    ctx.translate(0,pivY);ctx.rotate(ang);ctx.scale(sc,sc);ctx.translate(0,-pivY);
+  }
+  drawLamp(p);
+  var ppx=p/RES;
+  var showAll=(STATE==='spin'||STATE==='hold'||STATE==='video'||STATE==='end');
+  var n=showAll?CONFIG.WICK_COUNT:litCount;
+  for(var k=0;k<n;k++) drawFlamePix(SPOUTS[k],t,k*2.1+0.5,p,ppx);
+  ctx.restore();
+
+  updateParticles(dt);
+  updateConfetti(dt);
+  drawRings();
+  drawParticles();
+
+  if(bloom>0.01){
+    ctx.globalCompositeOperation='lighter';
+    var bx=m.ax,by=m.ay-1*p,br=Math.max(W,H)*0.7*bloom;
+    var bg=ctx.createRadialGradient(bx,by,0,bx,by,br);
+    bg.addColorStop(0,'rgba(255,236,176,'+(0.22*bloom)+')');
+    bg.addColorStop(0.5,'rgba(232,96,44,'+(0.1*bloom)+')');
+    bg.addColorStop(1,'rgba(172,34,81,0)');
+    ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx,by,br,0,6.2832);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+  }
+  drawConfetti();   // confetti rides on top of everything
+  requestAnimationFrame(frame);
+}
+function easeInOutCubic(x){return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;}
+
+/* =======================================================================
+   ============================  AUDIO  ==================================
+   ======================================================================= */
+var audioCtx=null;
+function unlockAudio(){
+  try{
+    if(!audioCtx){var AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC();}
+    if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+    if(audioCtx){var o=audioCtx.createOscillator(),g=audioCtx.createGain();g.gain.value=0.0001;
+      o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+0.03);}
+  }catch(e){}
+}
+var NOTES=[523.25,587.33,659.25,783.99,880.00];
+function tone(freq,t0,dur,gp,type){
+  var o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type||'sine';o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(gp,t0+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);o.connect(g);g.connect(audioCtx.destination);
+  o.start(t0);o.stop(t0+dur+0.05);
+}
+function playChime(idx){if(muted||!audioCtx)return;try{var t0=audioCtx.currentTime,base=NOTES[Math.min(idx,NOTES.length-1)];
+  tone(base,t0,0.9,0.28,'sine');tone(base*2,t0,0.7,0.12,'sine');tone(base*1.5,t0+0.02,0.55,0.07,'triangle');}catch(e){}}
+function playChord(){if(muted||!audioCtx)return;try{var t0=audioCtx.currentTime;
+  [523.25,659.25,783.99,1046.5].forEach(function(fr,i){tone(fr,t0+i*0.06,1.8,0.2,'sine');tone(fr*2,t0+i*0.06,1.2,0.06,'sine');});}catch(e){}}
+
+/* =======================================================================
+   =========================  YOUTUBE PLAYER  ============================
+   ======================================================================= */
+var player=null, ytReady=false, ytFailed=false, autoplayTimer=null;
+var USE_LOCAL=!!(CONFIG.LOCAL_VIDEO_SRC && CONFIG.LOCAL_VIDEO_SRC.trim());
+var localVid=document.getElementById('localvideo');
+if(USE_LOCAL){
+  /* ---- local .mp4 path: no network, no referrer issues ---- */
+  localVid.src=CONFIG.LOCAL_VIDEO_SRC.trim();
+  localVid.preload='auto'; localVid.load();
+  localVid.addEventListener('ended', enterEnd);
+  localVid.addEventListener('error', function(){ if(STATE==='video') enterEnd(); });
+}else{
+  /* ---- YouTube fallback (requires serving over http, see CONFIG note) ---- */
+  localVid.style.display='none';
+  if(location.protocol==='file:'){
+    console.warn('[inauguration] YouTube embeds DO NOT work when opening this file directly '+
+      '(file://) — that is what causes "Error 153" (no referrer). Either set LOCAL_VIDEO_SRC '+
+      'to a local .mp4, or serve this folder over http (e.g. `python -m http.server` then open '+
+      'http://localhost:8000). The lamp ceremony itself still works fine.');
+  }
+  (function loadYT(){
+    try{
+      var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";
+      tag.onerror=function(){ytFailed=true;};   // script blocked (offline) => graceful fallback
+      var first=document.getElementsByTagName('script')[0];first.parentNode.insertBefore(tag,first);
+    }catch(e){ytFailed=true;}
+  })();
+}
+window.onYouTubeIframeAPIReady=function(){
+  try{
+    player=new YT.Player('ytplayer',{videoId:CONFIG.YOUTUBE_ID,
+      host:'https://www.youtube-nocookie.com',   // privacy host; fewer embed blocks
+      playerVars:{enablejsapi:1,controls:1,rel:0,modestbranding:1,playsinline:1,fs:0,iv_load_policy:3},
+      events:{onReady:function(){ytReady=true;
+        try{var f=player.getIframe(); if(f) f.referrerPolicy='strict-origin-when-cross-origin';}catch(e){}},
+        onStateChange:onYTState,
+        onError:function(){ytFailed=true;if(STATE==='video')enterEnd();}}});
+  }catch(e){ytFailed=true;}
+};
+function onYTState(ev){if(ev.data===YT.PlayerState.ENDED)enterEnd();if(ev.data===YT.PlayerState.PLAYING)hideClickToPlay();}
+/* prime playback during the gate gesture so later autoplay-with-sound is allowed */
+function primeVideo(){
+  if(USE_LOCAL){ try{ var pr=localVid.play(); if(pr&&pr.then)pr.then(function(){localVid.pause();localVid.currentTime=0;}).catch(function(){}); }catch(e){} return; }
+  if(!player||!ytReady)return;
+  try{player.playVideo();setTimeout(function(){try{player.pauseVideo();player.seekTo(0,true);}catch(e){}},360);}catch(e){}
+}
+
+/* =======================================================================
+   ======================  FLOW / STATE MACHINE  =========================
+   ======================================================================= */
+var gateEl=document.getElementById('gate'), promptEl=document.getElementById('prompt'),
+    revealEl=document.getElementById('reveal'), dotsEl=document.getElementById('dots'),
+    ctpEl=document.getElementById('clicktoplay');
+
+function buildDots(){dotsEl.innerHTML='';for(var i=0;i<CONFIG.WICK_COUNT;i++){var d=document.createElement('div');d.className='dot';dotsEl.appendChild(d);}}
+function updateDots(){var ds=dotsEl.children;for(var i=0;i<ds.length;i++)ds[i].className='dot'+(i<litCount?' lit':'');}
+
+function requestFS(){try{var el=document.documentElement,fn=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;if(fn)fn.call(el);}catch(e){}}
+
+function start(){
+  if(STATE!=='gate')return;
+  requestFS();unlockAudio();primeVideo();
+  STATE='lighting';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  gateEl.classList.add('hide');setTimeout(function(){gateEl.style.display='none';},850);
+  revealEl.classList.remove('show');promptEl.classList.add('show');
+}
+function lightNext(){
+  if(STATE!=='lighting'||litCount>=CONFIG.WICK_COUNT)return;
+  playChime(litCount);spawnBurst(litCount);litCount++;updateDots();
+  if(litCount>=CONFIG.WICK_COUNT){promptEl.classList.remove('show');setTimeout(beginSpin,480);}
+}
+function beginSpin(){if(STATE!=='lighting')return;STATE='spin';spinStart=now();playChord();spawnFlourish();spawnConfetti();
+  setTimeout(function(){revealEl.classList.add('show');},700);}
+function enterVideo(){
+  if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
+  document.body.classList.add('to-video');   // commit to the crossfade
+  if(USE_LOCAL){ playLocal(); return; }
+  // YouTube: truly no player available (e.g. offline) -> stay on the lit-lamp scene, cleanly
+  if(ytFailed && !player){ enterEnd(); return; }
+  attemptPlay(0);
+}
+function playLocal(){
+  try{ localVid.currentTime=0; localVid.muted=false; }catch(e){}
+  var pr; try{ pr=localVid.play(); }catch(e){ showClickToPlay(); return; }
+  if(pr && pr.then) pr.then(hideClickToPlay).catch(function(){ showClickToPlay(); });
+}
+function attemptPlay(tries){
+  if(STATE!=='video')return;
+  if(player && ytReady){
+    try{ player.seekTo(0,true); if(player.unMute)player.unMute(); if(player.setVolume)player.setVolume(100); player.playVideo(); }catch(e){}
+    clearTimeout(autoplayTimer);
+    autoplayTimer=setTimeout(function(){      // if autoplay-with-sound was blocked, offer manual start
+      var s=-99; try{s=player.getPlayerState();}catch(e){}
+      if(s!==1 && s!==3) showClickToPlay();
+    },1700);
+    return;
+  }
+  if(tries>50){ player?showClickToPlay():enterEnd(); return; }  // ~10s waited for the API
+  setTimeout(function(){attemptPlay(tries+1);},200);
+}
+function showClickToPlay(){ctpEl.classList.add('show');}
+function hideClickToPlay(){ctpEl.classList.remove('show');}
+function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
+  document.body.classList.remove('to-video');hideClickToPlay();
+  try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
+  revealEl.classList.add('show');promptEl.classList.remove('show');}
+function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');hideClickToPlay();
+  revealEl.classList.remove('show');promptEl.classList.remove('show');
+  gateEl.style.display='flex';void gateEl.offsetWidth;gateEl.classList.remove('hide');
+  try{ if(USE_LOCAL){localVid.pause();localVid.currentTime=0;} else if(player){player.stopVideo();player.seekTo(0,true);} }catch(e){}}
+function jumpToVideo(){if(STATE==='video')return;litCount=CONFIG.WICK_COUNT;updateDots();revealEl.classList.add('show');enterVideo();}
+
+/* =======================================================================
+   ===========================  INPUT  ===================================
+   ======================================================================= */
+document.addEventListener('click',function(){
+  if(STATE==='gate'){start();return;}
+  if(STATE==='lighting'){lightNext();return;}
+});
+ctpEl.addEventListener('click',function(e){e.stopPropagation();hideClickToPlay();
+  try{ if(USE_LOCAL){localVid.muted=false;localVid.play();} else {player.unMute&&player.unMute();player.playVideo();} }catch(err){}});
+document.addEventListener('keydown',function(e){
+  var k=e.key;
+  if(k===' '||k==='Spacebar'||k==='Enter'){e.preventDefault();
+    if(STATE==='gate')start();else if(STATE==='lighting')lightNext();return;}
+  if(k==='r'||k==='R'){resetAll();return;}
+  if(k==='v'||k==='V'){jumpToVideo();return;}
+  if(k==='m'||k==='M'){muted=!muted;
+    try{ if(USE_LOCAL){localVid.muted=muted;} else if(player){muted?player.mute():player.unMute();} }catch(err){}return;}
+});
+
+/* ---- custom matchstick cursor ---- */
+var cursorEl=document.getElementById('cursor');
+var cx2=window.innerWidth/2, cy2=window.innerHeight/2;
+document.addEventListener('mousemove',function(e){cx2=e.clientX;cy2=e.clientY;});
+document.addEventListener('pointermove',function(e){cx2=e.clientX;cy2=e.clientY;});
+(function cursorLoop(){cursorEl.style.transform='translate('+cx2+'px,'+cy2+'px)';requestAnimationFrame(cursorLoop);})();
+
+/* =======================================================================
+   ===========================  BOOT  ====================================
+   ======================================================================= */
+buildDots();updateDots();buildLampSprite();resize();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

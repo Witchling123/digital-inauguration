@@ -1,0 +1,11 @@
+# Internal / confidential / large brand assets — DO NOT publish
+*.pdf
+
+# Local tooling & agent files
+.claude/
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+*~
