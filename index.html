@@ -337,7 +337,7 @@ function lampMetrics(){
 }
 /* 5 wick positions across the oil-bowl rim (local grid-x) + wick-tip height.
    A traditional standing samai / kuthuvilakku: tiered base, knobbed stem,
-   shallow oil well with five clean wicks. (Profile in CP, below.) */
+   shallow oil well with five clean wicks. (Turned profiles E_* below.) */
 var SPOUTS = [-13,-6.5,0,6.5,13];
 var FLAME_BASE = -3.2;
 
@@ -473,73 +473,125 @@ function drawBrandMark(t){
   ctx.restore();
 }
 
-/* ===================  PIXEL-ART SAMAI LAMP  ===================
-   The brass body is rasterised ONCE into a low-res offscreen sprite
-   from a turned profile, then scaled up nearest-neighbour for crisp,
-   intentional 8-bit pixels. Flames + sparks are pixel blocks too.   */
-var RES=2, U_TOP=-4.5, U_BOT=30, SW=0, SH=0, SCX=0, lampSprite=null;
-/* single-valued silhouette [unit-y, half-width], top -> bottom */
-var CP=[
-  [-1.4,13.7],[-0.5,14.0],[0.4,13.2],[1.5,11.1],[2.7,8.1],[3.8,5.1],[4.6,3.0],        /* oil bowl */
-  [4.8,2.1],[5.2,3.0],[5.7,2.0],[6.0,1.5],                                            /* collar */
-  [8.0,1.3],[8.6,2.4],[9.3,1.3],[9.7,1.2],[12.5,1.2],                                 /* upper stem + knob */
-  [13.0,3.0],[13.9,3.4],[14.8,3.0],[15.3,1.2],                                        /* centre bulb */
-  [18.5,1.3],[19.2,2.6],[19.9,1.4],[20.3,1.7],                                        /* lower stem + knob */
-  [21.3,3.4],[22.4,5.2],[23.6,7.0],[24.9,8.8],[26.2,10.6],[27.4,12.4],[28.3,13.8],[28.8,14.7],[29.5,14.9],[29.9,13.6],[30.0,11.0] /* tiered base */
-];
-var PAL={K:'#2c1906',d:'#774710',m:'#aa7826',b:'#e0b54c',h:'#ffe7a0',o:'#221305',ow:'#553715',wk:'#180d07'};
+/* ===================  BRASS SAMAI LAMP  ===================
+   Realistic turned-brass body (vector + metallic gradients, specular
+   highlights, engraved rings) with the cute pixel flames kept on top. */
 var FLAMEP=["..3..",".232.",".232.","12321","12221","11211",".111."];
-function halfWidthAt(uy){
-  if(uy<CP[0][0]||uy>CP[CP.length-1][0])return 0;
-  for(var i=1;i<CP.length;i++){if(uy<=CP[i][0]){var a=CP[i-1],b=CP[i];var tt=(uy-a[0])/((b[0]-a[0])||1);return a[1]+(b[1]-a[1])*tt;}}
-  return 0;
+
+/* turned elements: [unit-y, half-width] right edge, top -> bottom */
+var E_BOWL  = [[-1.6,13.6],[-1.0,14.3],[-0.3,13.1],[0.7,11.6],[1.9,8.7],[3.0,5.6],[4.0,3.2]];
+var E_COLLAR= [[4.0,3.2],[4.3,2.2],[4.7,3.0],[5.2,2.0],[5.5,1.6]];
+var E_KNOB1 = [[7.3,1.5],[7.9,2.4],[8.4,2.6],[8.9,2.4],[9.4,1.5]];
+var E_BULB  = [[12.1,1.5],[12.8,3.1],[13.5,3.6],[14.2,3.1],[14.7,1.5]];
+var E_KNOB2 = [[17.5,1.6],[18.1,2.7],[18.6,2.9],[19.1,2.7],[19.6,1.6]];
+var E_BASE  = [[19.6,1.9],[20.1,3.7],[20.6,4.1],[21.1,3.4],[22.0,5.3],[23.3,7.3],[24.7,9.5],[26.0,11.5],[27.1,13.1],[27.9,14.3],[28.5,15.1],[29.0,14.6],[29.4,12.6],[29.6,9.0]];
+
+/* polished-brass cylinder gradient, lit from upper-left (rim-light on right) */
+function brassGrad(cx,hw,p){
+  var g=ctx.createLinearGradient((cx-hw)*p,0,(cx+hw)*p,0);
+  g.addColorStop(0.00,'#2e1c06');
+  g.addColorStop(0.07,'#5e3a10');
+  g.addColorStop(0.20,'#a8761f');
+  g.addColorStop(0.34,'#e8bf5a');
+  g.addColorStop(0.43,'#fff4cc');   /* specular hotspot */
+  g.addColorStop(0.52,'#f0c863');
+  g.addColorStop(0.66,'#c08a2c');
+  g.addColorStop(0.82,'#7a4c14');
+  g.addColorStop(0.93,'#b9842a');   /* reflected rim light */
+  g.addColorStop(1.00,'#2e1c06');
+  return g;
 }
-function uyToSy(uy){return Math.round((uy-U_TOP)*RES);}
-function shadeBrass(r,sx,sy){          /* lit from upper-left; dithered transitions */
-  var ar=r<0?-r:r, d2=((sx+sy)&1);
-  if(ar>=0.84)return PAL.K;
-  if(r>=0.5)  return d2?PAL.d:PAL.m;
-  if(r>=0.22) return PAL.m;
-  if(r>=-0.06)return PAL.b;
-  if(r>=-0.34)return d2?PAL.h:PAL.b;   /* specular glint */
-  if(r>=-0.62)return PAL.b;
-  return d2?PAL.m:PAL.d;
+/* smooth closed curve THROUGH the points (Catmull-Rom) — keeps spheres round */
+function crPath(pts){
+  var n=pts.length;
+  ctx.moveTo(pts[0][0],pts[0][1]);
+  for(var i=0;i<n;i++){
+    var p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n],p3=pts[(i+2)%n];
+    ctx.bezierCurveTo(p1[0]+(p2[0]-p0[0])/6, p1[1]+(p2[1]-p0[1])/6,
+                      p2[0]-(p3[0]-p1[0])/6, p2[1]-(p3[1]-p1[1])/6, p2[0],p2[1]);
+  }
+  ctx.closePath();
 }
-function buildLampSprite(){
-  SH=Math.round((U_BOT-U_TOP)*RES);
-  var maxHalf=0,i; for(i=0;i<CP.length;i++) if(CP[i][1]>maxHalf)maxHalf=CP[i][1];
-  SW=Math.round(maxHalf*2*RES)+4; SCX=Math.round(SW/2);
-  lampSprite=document.createElement('canvas'); lampSprite.width=SW; lampSprite.height=SH;
-  var L=lampSprite.getContext('2d');
-  for(var sy=0;sy<SH;sy++){
-    var uy=U_TOP+(sy+0.5)/RES, hw=halfWidthAt(uy); if(hw<=0)continue;
-    var inBowl=(uy>=-1.4&&uy<=2.6), rimIn=hw*0.72;
-    for(var sx=0;sx<SW;sx++){
-      var ux=(sx+0.5-SCX)/RES; if(ux<-hw||ux>hw)continue;
-      var col;
-      if(inBowl && uy<=1.6 && ux>-rimIn && ux<rimIn){               /* carve oil well */
-        col=(uy<-0.1 && ux>-rimIn*0.85 && ux<rimIn*0.85)?PAL.o:PAL.ow;
-        if(((sx+sy)&1)===0 && ux<0 && uy<0.4) col=PAL.d;            /* oil sheen */
-      } else col=shadeBrass(ux/hw,sx,sy);
-      L.fillStyle=col; L.fillRect(sx,sy,1,1);
-    }
-  }
-  for(var w=0;w<SPOUTS.length;w++){                                  /* wick nubs + dark wicks */
-    var nx=Math.round(SCX+SPOUTS[w]*RES), y0=uyToSy(-2.6),y1=uyToSy(-1.2),yy;
-    for(yy=y0;yy<y1;yy++){ L.fillStyle=PAL.m; L.fillRect(nx-1,yy,1,1); L.fillStyle=PAL.b; L.fillRect(nx,yy,1,1); }
-    var w0=uyToSy(-3.8),w1=uyToSy(-2.6);
-    for(yy=w0;yy<w1;yy++){ L.fillStyle=PAL.wk; L.fillRect(nx,yy,1,1); }
-  }
+function drawTurned(prof,p){
+  var maxHW=0,i;for(i=0;i<prof.length;i++)if(prof[i][1]>maxHW)maxHW=prof[i][1];
+  var pts=[];
+  for(i=0;i<prof.length;i++)pts.push([prof[i][1]*p,prof[i][0]*p]);
+  for(i=prof.length-1;i>=0;i--)pts.push([-prof[i][1]*p,prof[i][0]*p]);
+  ctx.beginPath();crPath(pts);
+  ctx.fillStyle=brassGrad(0,maxHW,p);ctx.fill();
+  ctx.lineJoin='round';ctx.lineWidth=Math.max(1,p*0.09);
+  ctx.strokeStyle='rgba(40,22,6,0.5)';ctx.stroke();
+}
+function drawColumn(y0,y1,hw,p){       /* straight turned stem segment */
+  ctx.fillStyle=brassGrad(0,hw,p);
+  ctx.fillRect(-hw*p,y0*p,2*hw*p,(y1-y0)*p);
+  var e=Math.max(1,p*0.09);
+  ctx.fillStyle='rgba(40,22,6,0.45)';
+  ctx.fillRect(-hw*p,y0*p,e,(y1-y0)*p); ctx.fillRect(hw*p-e,y0*p,e,(y1-y0)*p);
+}
+function sphereHi(cy,r,p){             /* spherical highlight on a knob/bulb */
+  ctx.globalCompositeOperation='lighter';
+  var hx=-r*0.3*p, hy=(cy-r*0.4)*p, hr=r*0.95*p;
+  var g=ctx.createRadialGradient(hx,hy,0,hx,hy,hr);
+  g.addColorStop(0,'rgba(255,245,210,0.5)');g.addColorStop(1,'rgba(255,245,210,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,hr,0,6.2832);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+}
+function ringGroove(y,hw,p){           /* engraved lathe ring */
+  ctx.lineWidth=Math.max(1,p*0.07);
+  ctx.strokeStyle='rgba(40,22,6,0.45)';
+  ctx.beginPath();ctx.moveTo(-hw*p,y*p);ctx.lineTo(hw*p,y*p);ctx.stroke();
+  ctx.strokeStyle='rgba(255,240,200,0.22)';
+  ctx.beginPath();ctx.moveTo(-hw*p,(y+0.16)*p);ctx.lineTo(hw*p,(y+0.16)*p);ctx.stroke();
+}
+function drawBeak(s,p){                 /* small spout + dark cotton wick on the rim */
+  var dir=s<0?-1:(s>0?1:0);
+  ctx.beginPath();
+  ctx.moveTo((s-1.4)*p,-0.9*p);
+  ctx.quadraticCurveTo(s*p,-1.5*p,(s+1.4)*p,-0.9*p);
+  ctx.lineTo((s+0.6+dir*0.4)*p,-3.0*p);
+  ctx.quadraticCurveTo((s+dir*0.5)*p,-3.5*p,(s-0.6+dir*0.4)*p,-3.0*p);
+  ctx.closePath();
+  ctx.fillStyle=brassGrad(s,1.6,p);ctx.fill();
+  ctx.lineWidth=Math.max(1,p*0.08);ctx.strokeStyle='rgba(40,22,6,0.55)';ctx.stroke();
+  ctx.fillStyle='#241308';ctx.fillRect((s-0.18)*p,-3.6*p,0.36*p,1.15*p);
 }
 
-/* draw the lamp sprite (caller already translated to anchor / rotated); p = unit size */
+/* draw the whole lamp (caller already translated to anchor / rotated); p = unit size */
 function drawLamp(p){
-  if(!lampSprite) buildLampSprite();
-  var ppx=p/RES;
-  ctx.imageSmoothingEnabled=false;
-  ctx.drawImage(lampSprite, -SCX*ppx, U_TOP*p, SW*ppx, SH*ppx);
-  ctx.imageSmoothingEnabled=true;
-  // warm lit-glow wash over the brass, grows with each flame (smooth additive — torchlight)
+  drawTurned(E_BASE,p);
+  ringGroove(22.0,5.3,p); ringGroove(24.7,9.5,p); ringGroove(27.1,13.1,p);
+  drawTurned(E_KNOB2,p); sphereHi(18.55,2.0,p);
+  drawColumn(14.8,17.7,1.45,p); ringGroove(16.2,1.45,p);
+  drawTurned(E_BULB,p);  sphereHi(13.5,3.2,p);
+  drawColumn(9.5,12.2,1.4,p);   ringGroove(10.8,1.4,p);
+  drawTurned(E_KNOB1,p); sphereHi(8.4,2.0,p);
+  drawColumn(5.5,7.4,1.45,p);
+  drawTurned(E_COLLAR,p);
+  drawTurned(E_BOWL,p);
+
+  // recessed oil well (dark) with a warm reflection
+  ctx.beginPath();ctx.ellipse(0,-0.4*p,11.8*p,1.9*p,0,0,6.2832);
+  var ow=ctx.createRadialGradient(-3*p,-0.9*p,0,0,-0.4*p,11.8*p);
+  ow.addColorStop(0,'#6a4516');ow.addColorStop(0.55,'#33200a');ow.addColorStop(1,'#1b1106');
+  ctx.fillStyle=ow;ctx.fill();
+  ctx.lineWidth=Math.max(1,p*0.16);ctx.strokeStyle='rgba(18,10,4,0.55)';ctx.stroke();
+  ctx.globalCompositeOperation='lighter';
+  var rf=ctx.createRadialGradient(2.5*p,0.3*p,0,2.5*p,0.3*p,5*p);
+  rf.addColorStop(0,'rgba(255,185,95,0.16)');rf.addColorStop(1,'rgba(255,185,95,0)');
+  ctx.fillStyle=rf;ctx.beginPath();ctx.ellipse(2.5*p,0.3*p,5*p,1.1*p,0,0,6.2832);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+
+  // bright rim crest (top half of the rim catching light)
+  ctx.lineWidth=Math.max(1.5,p*0.22);
+  var rh=ctx.createLinearGradient(-13.6*p,0,13.6*p,0);
+  rh.addColorStop(0,'rgba(255,240,200,0)');rh.addColorStop(0.5,'rgba(255,250,225,0.65)');rh.addColorStop(1,'rgba(255,240,200,0)');
+  ctx.strokeStyle=rh;
+  ctx.beginPath();ctx.ellipse(0,-1.0*p,13.6*p,1.5*p,0,Math.PI,2*Math.PI);ctx.stroke();
+
+  for(var w=0;w<SPOUTS.length;w++) drawBeak(SPOUTS[w],p);   // five wicks
+
+  // warm lit-glow wash over the brass, grows with each flame (torchlight)
   var litK=litCount/CONFIG.WICK_COUNT;
   if(litK>0){
     ctx.globalCompositeOperation='lighter';
@@ -550,33 +602,34 @@ function drawLamp(p){
   }
 }
 
-function fillPix(sx,sy,ppx,p,col){ ctx.fillStyle=col; ctx.fillRect((sx-SCX)*ppx, U_TOP*p+sy*ppx, ppx, ppx); }
-
-/* chunky pixel flame rising from a wick, with a smooth torch glow behind it */
-function drawFlamePix(s,t,seed,p,ppx){
-  var bx=SCX+s*RES, byBase=uyToSy(-2.8);
+/* chunky pixel flame rising from a wick (local unit coords), with a torch glow */
+function drawFlamePix(s,t,seed,p){
+  var fpx=p*0.5;                       // one flame-pixel
+  var bx=s*p, by=FLAME_BASE*p;
   var fl=Math.sin(t*8+seed), fl2=Math.sin(t*5.3+seed*1.7);
   var sway=fl*0.6+Math.sin(t*11+seed*2.1)*0.3;
   var tall=fl>0.45?1:(fl<-0.5?-1:0);
-  // soft glow (smooth — Terraria torchlight)
-  var lx=(bx-SCX)*ppx, ly=U_TOP*p+(byBase-3)*ppx;
+  // soft glow
+  var gy=by-3*fpx;
   ctx.globalCompositeOperation='lighter';
-  var gr=ppx*7.5*(0.9+0.12*fl2);
-  var gg=ctx.createRadialGradient(lx,ly,0,lx,ly,gr);
+  var gr=fpx*7.5*(0.9+0.12*fl2);
+  var gg=ctx.createRadialGradient(bx,gy,0,bx,gy,gr);
   gg.addColorStop(0,'rgba(255,238,180,0.62)');gg.addColorStop(0.4,'rgba(255,150,50,0.32)');gg.addColorStop(1,'rgba(232,96,44,0)');
-  ctx.fillStyle=gg;ctx.beginPath();ctx.arc(lx,ly,gr,0,6.2832);ctx.fill();
+  ctx.fillStyle=gg;ctx.beginPath();ctx.arc(bx,gy,gr,0,6.2832);ctx.fill();
   ctx.globalCompositeOperation='source-over';
   // pixel flame body
   var rows=FLAMEP.length, bright=fl2>0;
   for(var ri=0;ri<rows;ri++){
     if(tall<0 && ri===0) continue;                       // shorter flicker frame
     var line=FLAMEP[ri], up=(rows-1-ri)/(rows-1);
-    var sy=byBase-(rows-ri), dx=Math.round(sway*up*2);
+    var ry=by-(rows-ri)*fpx, dx=Math.round(sway*up*2)*fpx;
     for(var ci=0;ci<line.length;ci++){var ch=line.charAt(ci);if(ch==='.')continue;
       var col=ch==='3'?(bright?'#fffefa':'#fff3c0'):(ch==='2'?'#ffd24a':'#ff8a1e');
-      fillPix(bx+(ci-2)+dx, sy, ppx, p, col);}
+      ctx.fillStyle=col;
+      ctx.fillRect(Math.round(bx+(ci-2)*fpx+dx),Math.round(ry),Math.ceil(fpx),Math.ceil(fpx));}
   }
-  if(tall>0) fillPix(bx+Math.round(sway*2), byBase-rows-1, ppx, p, bright?'#fffefa':'#fff3c0'); // taller tip
+  if(tall>0){ ctx.fillStyle=bright?'#fffefa':'#fff3c0';
+    ctx.fillRect(Math.round(bx+Math.round(sway*2)*fpx),Math.round(by-(rows+1)*fpx),Math.ceil(fpx),Math.ceil(fpx)); }
 }
 
 function drawLampGlow(m,extra){
@@ -658,10 +711,9 @@ function frame(){
       ctx.translate(0,pivY);ctx.rotate(ang);ctx.scale(sc,sc);ctx.translate(0,-pivY);
     }
     drawLamp(p);
-    var ppx=p/RES;
     var showAll=(STATE==='spin'||STATE==='hold'||STATE==='end');
     var n=showAll?CONFIG.WICK_COUNT:litCount;
-    for(var k=0;k<n;k++) drawFlamePix(SPOUTS[k],t,k*2.1+0.5,p,ppx);
+    for(var k=0;k<n;k++) drawFlamePix(SPOUTS[k],t,k*2.1+0.5,p);
     ctx.restore();
   }
 
@@ -852,7 +904,7 @@ document.addEventListener('pointermove',function(e){cx2=e.clientX;cy2=e.clientY;
 /* =======================================================================
    ===========================  BOOT  ====================================
    ======================================================================= */
-buildDots();updateDots();buildLampSprite();resize();requestAnimationFrame(frame);
+buildDots();updateDots();resize();requestAnimationFrame(frame);
 </script>
 </body>
 </html>
