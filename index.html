@@ -499,9 +499,9 @@ var E_KNOB1 = [[4.8,1.26],[5.2,1.84],[5.7,2.04],[6.2,1.84],[6.6,1.30]];
 var E_RIBS  = [[6.6,1.44],[7.4,1.36],[8.2,1.28],[9.0,1.20],[9.8,1.12],[10.6,1.04],[11.2,1.00]]; /* long ribbed taper */
 var E_BULB  = [[11.2,1.16],[11.9,2.36],[12.5,2.62],[13.2,2.36],[13.8,1.18]];
 var E_KNOB2 = [[17.0,1.30],[17.8,2.46],[18.6,2.74],[19.4,2.46],[20.2,1.34]];   /* lower vase bulb */
-var E_BASE  = [[20.2,1.42],[21.1,2.3],[22.1,3.3],[23.3,4.8],[24.5,6.4],[25.5,7.8],
-               [26.3,8.8],[26.9,9.4],[27.3,8.9],[27.6,8.6],
-               [28.0,9.0],[28.4,9.5],[28.7,8.7]];   /* slender bell + flat stepped foot */
+/* centre dome/bell that rises out of the wide flat saucer foot (drawBase) */
+var E_DOME  = [[20.2,1.42],[20.9,2.05],[21.7,2.9],[22.6,3.7],[23.6,4.4],
+               [24.4,4.85],[25.1,5.0],[25.6,4.85],[26.0,4.4]];
 
 /* polished-brass cross-section, lit upper-left: shadow edge -> rising tone ->
    crisp specular -> mid -> core shadow -> reflected environment rim -> dark edge.
@@ -597,12 +597,13 @@ function sphereHi(cy,r,p){             /* spherical highlight on a knob/bulb */
   ctx.fillStyle=g2;ctx.beginPath();ctx.arc(hx,hy,cr,0,6.2832);ctx.fill();
   ctx.globalCompositeOperation='source-over';
 }
-function ringGroove(y,hw,p){           /* engraved lathe ring */
-  ctx.lineWidth=Math.max(1,p*0.07);
-  ctx.strokeStyle='rgba(40,22,6,0.45)';
+function ringGroove(y,hw,p){           /* engraved lathe ring: dark cut + bright lower lip */
+  ctx.lineWidth=Math.max(1,p*0.08);
+  ctx.strokeStyle='rgba(34,18,4,0.55)';
   ctx.beginPath();ctx.moveTo(-hw*p,y*p);ctx.lineTo(hw*p,y*p);ctx.stroke();
-  ctx.strokeStyle='rgba(255,240,200,0.22)';
-  ctx.beginPath();ctx.moveTo(-hw*p,(y+0.16)*p);ctx.lineTo(hw*p,(y+0.16)*p);ctx.stroke();
+  ctx.lineWidth=Math.max(1,p*0.06);
+  ctx.strokeStyle='rgba(255,242,205,0.28)';
+  ctx.beginPath();ctx.moveTo(-hw*p,(y+0.15)*p);ctx.lineTo(hw*p,(y+0.15)*p);ctx.stroke();
 }
 function drawBeak(s,p){                 /* elegant pointed spout + cotton wick on the rim */
   var dir=s<0?-1:(s>0?1:0), lean=dir*0.6;    // outer spouts lean outward
@@ -627,10 +628,52 @@ function drawBeak(s,p){                 /* elegant pointed spout + cotton wick o
   ctx.beginPath();ctx.ellipse((s+lean)*p,-4.7*p,0.26*p,0.5*p,0,0,6.2832);ctx.fill();
 }
 
+/* wide flat brass saucer foot with a small bell at its centre (the defining
+   silhouette of a Kerala nilavilakku base) + a soft contact shadow on the floor */
+function drawBase(p){
+  var by=25.9, brx=11.6, bry=2.0, th=1.05;      // brim plane, radii, edge thickness
+  // soft contact shadow on the floor under the tray
+  ctx.save();ctx.translate(0,(by+th+0.4)*p);ctx.scale(1,0.20);
+  var cs=ctx.createRadialGradient(0,0,0,0,0,brx*1.18*p);
+  cs.addColorStop(0,'rgba(8,3,2,0.5)');cs.addColorStop(0.6,'rgba(8,3,2,0.26)');cs.addColorStop(1,'rgba(8,3,2,0)');
+  ctx.fillStyle=cs;ctx.beginPath();ctx.arc(0,0,brx*1.18*p,0,6.2832);ctx.fill();ctx.restore();
+
+  // turned front edge of the plate (lower ellipse, horizontal brass) — gives real thickness
+  ctx.beginPath();ctx.ellipse(0,(by+th)*p,brx*p,bry*p,0,0,6.2832);
+  ctx.fillStyle=brassGrad(0,brx,p);ctx.fill();
+  // dark tuck under the plate lip (AO separating top surface from edge)
+  ctx.beginPath();ctx.ellipse(0,(by+0.32)*p,brx*0.992*p,bry*p,0,0.04*Math.PI,0.96*Math.PI);
+  ctx.lineWidth=Math.max(1,p*0.22);ctx.strokeStyle='rgba(26,15,4,0.5)';ctx.stroke();
+
+  // top plate surface — radial brass, lit from upper-left
+  ctx.beginPath();ctx.ellipse(0,by*p,brx*p,bry*p,0,0,6.2832);
+  var bg=ctx.createRadialGradient(-brx*0.32*p,(by-bry*0.55)*p,0,0,by*p,brx*1.08*p);
+  bg.addColorStop(0,'#fff4cf');bg.addColorStop(0.15,'#eccb72');bg.addColorStop(0.4,'#caa03c');
+  bg.addColorStop(0.7,'#9c7126');bg.addColorStop(0.88,'#6f4c18');bg.addColorStop(1,'#46300e');
+  ctx.fillStyle=bg;ctx.fill();
+  // concentric turned grooves on the tray
+  for(var ri=0;ri<4;ri++){var f=0.46+ri*0.16;
+    ctx.lineWidth=Math.max(1,p*0.045);ctx.strokeStyle='rgba(36,21,6,0.32)';
+    ctx.beginPath();ctx.ellipse(0,by*p,brx*f*p,bry*f*p,0,0,6.2832);ctx.stroke();
+    ctx.strokeStyle='rgba(255,238,190,0.13)';
+    ctx.beginPath();ctx.ellipse(0,(by+0.07)*p,brx*f*p,bry*f*p,0,0.05*Math.PI,0.95*Math.PI);ctx.stroke();}
+  // bright catch-light along the front rim
+  ctx.globalCompositeOperation='lighter';
+  ctx.lineWidth=Math.max(1.2,p*0.13);
+  var hl=ctx.createLinearGradient(-brx*p,0,brx*p,0);
+  hl.addColorStop(0,'rgba(255,245,210,0)');hl.addColorStop(0.30,'rgba(255,251,232,0.6)');hl.addColorStop(0.62,'rgba(255,245,210,0)');
+  ctx.strokeStyle=hl;
+  ctx.beginPath();ctx.ellipse(0,(by+th)*p,brx*p,bry*p,0,0.12*Math.PI,0.92*Math.PI);ctx.stroke();
+  ctx.globalCompositeOperation='source-over';
+
+  // central bell/dome rising to the stem
+  drawTurned(E_DOME,p);
+  ringGroove(24.4,4.85,p);
+}
+
 /* draw the whole lamp (caller already translated to anchor / rotated); p = unit size */
 function drawLamp(p){
-  drawTurned(E_BASE,p);
-  ringGroove(26.0,8.7,p);
+  drawBase(p);
   drawTurned(E_KNOB2,p); sphereHi(18.6,2.74,p);
   drawColumn(13.8,17.0,1.04,p); ringGroove(15.4,1.04,p);
   drawTurned(E_BULB,p);  sphereHi(12.5,2.62,p);
@@ -658,6 +701,18 @@ function drawLamp(p){
   rh.addColorStop(0,'rgba(255,240,200,0)');rh.addColorStop(0.5,'rgba(255,250,225,0.65)');rh.addColorStop(1,'rgba(255,240,200,0)');
   ctx.strokeStyle=rh;
   ctx.beginPath();ctx.ellipse(0,-2.3*p,11.4*p,1.45*p,0,Math.PI,2*Math.PI);ctx.stroke();
+
+  // petal flower: soft radial creases dividing the front rim into petals (tips at the spouts)
+  var pv=[-8.0,-2.7,2.7,8.0];
+  ctx.lineCap='round';
+  for(var pi=0;pi<pv.length;pi++){var X=pv[pi];
+    var yf=-2.3+1.42*Math.sqrt(Math.max(0,1-(X/11.4)*(X/11.4)));
+    ctx.lineWidth=Math.max(1,p*0.07);ctx.strokeStyle='rgba(30,17,5,0.3)';
+    ctx.beginPath();ctx.moveTo(X*p,yf*p);ctx.lineTo(X*0.55*p,(-0.9)*p);ctx.stroke();
+    ctx.lineWidth=Math.max(1,p*0.05);ctx.strokeStyle='rgba(255,240,200,0.16)';  // lit edge of the next petal
+    ctx.beginPath();ctx.moveTo((X+0.18)*p,yf*p);ctx.lineTo((X*0.55+0.18)*p,(-0.9)*p);ctx.stroke();
+  }
+  ctx.lineCap='butt';
 
   // central finial (vase + tall spire) rising from the bowl centre, behind the flames
   drawColumn(-5.5,-1.0,0.8,p);
