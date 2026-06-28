@@ -304,7 +304,7 @@ var CONFIG = {
   /* NOTE: YouTube embeds are BLOCKED when opening this file directly (file://) —
      that causes "error 153". To use YouTube you MUST serve over http, e.g. run
      `python -m http.server` in this folder and open http://localhost:8000 .     */
-  WICK_COUNT      : 5,
+  WICK_COUNT      : 6,
   SPIN_DURATION   : 2600,   // ms — ceremonial turntable spin of the 3D lamp
   HOLD_DURATION   : 3000,   // ms — beat on the "all lit" + title before the video
   TURNS           : 3       // full Y-axis turns (integer => the five beaks end facing front)
@@ -373,7 +373,7 @@ function lampMetrics(){
 /* 5 wick positions across the oil-bowl rim (local grid-x) + wick-tip height.
    A traditional standing samai / kuthuvilakku: tiered base, knobbed stem,
    shallow oil well with five clean wicks. (Turned profiles E_* below.) */
-var SPOUTS = [-10,-5,0,5,10];
+var SPOUTS = [-10.5,-6.3,-2.1,2.1,6.3,10.5];   /* six wicks fanned across the 2D-fallback dish rim */
 var FLAME_BASE = -4.2;
 
 /* ---------- ambient: stars + embers ---------- */
@@ -982,7 +982,7 @@ function unlockAudio(){
       o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+0.03);}
   }catch(e){}
 }
-var NOTES=[523.25,587.33,659.25,783.99,880.00];
+var NOTES=[523.25,587.33,659.25,783.99,880.00,987.77];   /* C5 D5 E5 G5 A5 B5 — one per wick */
 function tone(freq,t0,dur,gp,type){
   var o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type||'sine';o.frequency.value=freq;
   g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(gp,t0+0.012);
@@ -1260,7 +1260,7 @@ import * as THREE from 'three';
   var lamp = new THREE.Group(); lamp.add(body);
 
   /* ---------- five beaks (spouts) + wick-tip markers, fanned across the front ---------- */
-  var markers=[], beakAz=[-1.15,-0.58,0,0.58,1.15];
+  var markers=[], beakAz=[-1.25,-0.75,-0.25,0.25,0.75,1.25];   /* six beaks fanned across the front */
   var beakGeo=new THREE.ConeGeometry(0.42*S, 1.5*S, 18);
   var rimR=10.2*S, rimY=2.55*S, tipR=11.2*S, tipY=3.5*S;
   for(var b=0;b<beakAz.length;b++){
