@@ -106,6 +106,11 @@ canvas#scene{
 body.to-video #scene,body.to-video #vignette,body.to-video #ui{opacity:0;}
 body.to-video #video{opacity:1;pointer-events:auto;}
 
+/* finale: fade the lamp/scene away, leaving only the revealed title */
+#scene,#vignette{transition:opacity 1.3s ease;}
+body.dim-scene #scene,body.dim-scene #vignette{opacity:0;}
+body.dim-scene #dots{opacity:0;transition:opacity .6s ease;}
+
 /* click-to-play fallback */
 #clicktoplay{
   position:fixed;inset:0;z-index:6;display:none;
@@ -287,9 +292,9 @@ var CONFIG = {
      that causes "error 153". To use YouTube you MUST serve over http, e.g. run
      `python -m http.server` in this folder and open http://localhost:8000 .     */
   WICK_COUNT      : 5,
-  SPIN_DURATION   : 2400,   // ms — celebratory spin
-  HOLD_DURATION   : 3000,   // ms — beat on the "all lit" moment before video
-  TURNS           : 2       // full rotations during the spin (integer => ends upright)
+  REVEAL_AT       : 350,    // ms after all-lit — fade the initiative title in
+  DIM_AT          : 1900,   // ms — begin fading the lamp/scene out, leaving the text
+  FADE_DURATION   : 4400    // ms total on the finale before crossfading into the video
 };
 /* Do NOT hardcode stakeholder names. Five wicks, five dots, no names on screen. */
 
@@ -311,9 +316,9 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 /* =======================================================================
    ============================  STATE  ==================================
    ======================================================================= */
-var STATE = 'gate';           // gate | lighting | spin | hold | video | end
+var STATE = 'gate';           // gate | lighting | finale | video | end
 var litCount = 0, muted = false;
-var spinStart = 0, holdStart = 0;
+var finaleStart = 0;
 var now = (typeof performance!=='undefined' && performance.now) ? function(){return performance.now();} : function(){return +new Date();};
 
 /* =======================================================================
@@ -484,29 +489,37 @@ function drawBrandMark(t){
 /* turned elements: [unit-y, half-width] right edge, top -> bottom.
    Modelled on a Kerala nilavilakku: vase+spire finial, ribbed pillar with
    stacked bulbs, shallow petal bowl, wide flat domed foot. */
-var E_FINIAL= [[-15.6,0.0],[-15.0,0.30],[-14.2,0.55],[-13.3,0.82],[-12.4,1.04],
-               [-11.5,1.20],[-10.6,1.62],[-9.8,2.12],[-9.1,2.48],[-8.5,2.56],
-               [-7.9,2.34],[-7.3,1.80],[-6.8,1.20],[-6.4,0.92],
-               [-6.0,1.42],[-5.6,1.50],[-5.3,0.90]];   /* slender spire + onion bulb + bead + collar */
-var E_BOWL  = [[-2.4,11.0],[-1.6,11.8],[-0.9,11.2],[0.0,9.7],[1.0,7.4],[2.1,4.9],[3.0,2.9]];
-var E_COLLAR= [[3.0,2.9],[3.3,1.8],[3.7,2.5],[4.1,1.55],[4.4,1.35]];
-var E_KNOB1 = [[4.6,1.35],[5.0,1.95],[5.4,2.15],[5.8,1.95],[6.3,1.35]];
-var E_RIBS  = [[6.3,1.5],[6.9,1.42],[7.5,1.34],[8.1,1.26],[8.7,1.18],[9.3,1.1],[9.7,1.04]]; /* ribbed taper */
-var E_BULB  = [[9.7,1.2],[10.4,2.5],[11.0,2.8],[11.6,2.5],[12.2,1.2]];
-var E_KNOB2 = [[15.2,1.3],[15.9,2.7],[16.5,3.0],[17.1,2.7],[17.8,1.3]];   /* larger lower bulb */
-var E_BASE  = [[19.2,1.6],[20.0,2.8],[21.0,4.2],[22.2,6.2],[23.4,8.5],[24.6,10.6],[25.6,12.4],[26.4,13.8],[27.0,14.8],[27.4,15.3],[27.6,15.4],[27.9,14.6],[28.1,13.3],[28.4,12.7],[29.0,12.5],[29.2,11.4]];
+var E_FINIAL= [[-16.0,0.0],[-15.4,0.27],[-14.6,0.50],[-13.6,0.74],[-12.6,0.95],
+               [-11.6,1.16],[-10.7,1.56],[-9.9,2.04],[-9.2,2.38],[-8.6,2.46],
+               [-8.0,2.26],[-7.4,1.72],[-6.9,1.16],[-6.5,0.86],
+               [-6.1,1.28],[-5.8,1.36],[-5.5,0.84]];   /* slender spire + onion bulb + bead + collar */
+var E_BOWL  = [[-2.6,11.0],[-1.7,11.6],[-1.0,11.0],[-0.1,9.3],[0.9,6.8],[2.0,4.2],[3.0,2.5]];
+var E_COLLAR= [[3.0,2.5],[3.5,1.58],[4.0,2.22],[4.5,1.42],[4.8,1.26]];
+var E_KNOB1 = [[4.8,1.26],[5.2,1.84],[5.7,2.04],[6.2,1.84],[6.6,1.30]];
+var E_RIBS  = [[6.6,1.44],[7.4,1.36],[8.2,1.28],[9.0,1.20],[9.8,1.12],[10.6,1.04],[11.2,1.00]]; /* long ribbed taper */
+var E_BULB  = [[11.2,1.16],[11.9,2.36],[12.5,2.62],[13.2,2.36],[13.8,1.18]];
+var E_KNOB2 = [[17.0,1.30],[17.8,2.46],[18.6,2.74],[19.4,2.46],[20.2,1.34]];   /* lower vase bulb */
+var E_BASE  = [[20.2,1.42],[21.1,2.3],[22.1,3.3],[23.3,4.8],[24.5,6.4],[25.5,7.8],
+               [26.3,8.8],[26.9,9.4],[27.3,8.9],[27.6,8.6],
+               [28.0,9.0],[28.4,9.5],[28.7,8.7]];   /* slender bell + flat stepped foot */
 
-/* polished-brass cylinder gradient, lit from upper-left (rim-light on right) */
+/* polished-brass cross-section, lit upper-left: shadow edge -> rising tone ->
+   crisp specular -> mid -> core shadow -> reflected environment rim -> dark edge.
+   The extra stops kill the flat "banded" look and read as rounded turned metal. */
 function brassGrad(cx,hw,p){
   var g=ctx.createLinearGradient((cx-hw)*p,0,(cx+hw)*p,0);
-  g.addColorStop(0.00,'#3a2308');
-  g.addColorStop(0.16,'#8a5e1a');
-  g.addColorStop(0.35,'#d8ab44');
-  g.addColorStop(0.46,'#fff2c6');   /* specular hotspot */
-  g.addColorStop(0.58,'#e6b652');
-  g.addColorStop(0.78,'#9c6c22');
-  g.addColorStop(0.92,'#a87a28');   /* reflected rim light */
-  g.addColorStop(1.00,'#3a2308');
+  g.addColorStop(0.00,'#241603');
+  g.addColorStop(0.08,'#5a3c10');
+  g.addColorStop(0.19,'#976c1e');
+  g.addColorStop(0.31,'#d7aa45');
+  g.addColorStop(0.40,'#fff7dc');   /* specular hotspot */
+  g.addColorStop(0.48,'#efd384');
+  g.addColorStop(0.59,'#c89e3b');
+  g.addColorStop(0.72,'#8a611f');
+  g.addColorStop(0.83,'#643f12');   /* core shadow */
+  g.addColorStop(0.91,'#b88a31');   /* reflected environment rim-light */
+  g.addColorStop(0.97,'#7c5418');
+  g.addColorStop(1.00,'#2c1c08');
   return g;
 }
 /* smooth closed curve THROUGH the points (Catmull-Rom) — keeps spheres round */
@@ -524,17 +537,24 @@ function crPath(pts){
    a light catch near the top, plus a crisp specular streak — reads as real metal */
 function metalShade(yTop,yBot,maxHW,p){
   var vg=ctx.createLinearGradient(0,yTop*p,0,yBot*p);
-  vg.addColorStop(0.00,'rgba(16,8,2,0.52)');      // top edge curls away (AO)
-  vg.addColorStop(0.13,'rgba(255,245,212,0.12)'); // sky / light catch
-  vg.addColorStop(0.46,'rgba(0,0,0,0)');
-  vg.addColorStop(0.74,'rgba(16,8,2,0.26)');
-  vg.addColorStop(1.00,'rgba(16,8,2,0.55)');      // bottom edge (AO / contact)
+  vg.addColorStop(0.00,'rgba(14,7,2,0.50)');      // top edge curls away (AO)
+  vg.addColorStop(0.12,'rgba(255,246,214,0.14)'); // sky / light catch
+  vg.addColorStop(0.34,'rgba(0,0,0,0)');
+  vg.addColorStop(0.62,'rgba(14,7,2,0.10)');
+  vg.addColorStop(0.80,'rgba(255,210,140,0.07)'); // warm bounce from below
+  vg.addColorStop(1.00,'rgba(14,7,2,0.55)');      // bottom edge (AO / contact)
   ctx.fillStyle=vg;ctx.fillRect(-maxHW*p-2,yTop*p-1,2*maxHW*p+4,(yBot-yTop)*p+2);
-  ctx.globalCompositeOperation='lighter';         // crisp specular streak, left of centre
-  var hw2=maxHW*0.13, hx=-maxHW*0.24;
+  ctx.globalCompositeOperation='lighter';
+  // crisp primary specular streak, left of centre
+  var hw2=maxHW*0.11, hx=-maxHW*0.26, y0=(yTop+0.05*(yBot-yTop))*p, hh=0.84*(yBot-yTop)*p;
   var hg=ctx.createLinearGradient((hx-hw2)*p,0,(hx+hw2)*p,0);
-  hg.addColorStop(0,'rgba(255,252,238,0)');hg.addColorStop(0.5,'rgba(255,253,246,0.6)');hg.addColorStop(1,'rgba(255,252,238,0)');
-  ctx.fillStyle=hg;ctx.fillRect((hx-hw2)*p,(yTop+0.06*(yBot-yTop))*p,2*hw2*p,0.82*(yBot-yTop)*p);
+  hg.addColorStop(0,'rgba(255,252,238,0)');hg.addColorStop(0.5,'rgba(255,254,248,0.62)');hg.addColorStop(1,'rgba(255,252,238,0)');
+  ctx.fillStyle=hg;ctx.fillRect((hx-hw2)*p,y0,2*hw2*p,hh);
+  // faint secondary glint near the reflected rim
+  var w3=maxHW*0.07, x3=maxHW*0.34;
+  var hg2=ctx.createLinearGradient((x3-w3)*p,0,(x3+w3)*p,0);
+  hg2.addColorStop(0,'rgba(255,236,196,0)');hg2.addColorStop(0.5,'rgba(255,240,205,0.22)');hg2.addColorStop(1,'rgba(255,236,196,0)');
+  ctx.fillStyle=hg2;ctx.fillRect((x3-w3)*p,y0,2*w3*p,hh);
   ctx.globalCompositeOperation='source-over';
 }
 function drawTurned(prof,p){
@@ -550,8 +570,8 @@ function drawTurned(prof,p){
   metalShade(yTop,yBot,maxHW,p);
   ctx.restore();
   ctx.beginPath();crPath(pts);
-  ctx.lineJoin='round';ctx.lineWidth=Math.max(1,p*0.08);
-  ctx.strokeStyle='rgba(34,18,4,0.6)';ctx.stroke();
+  ctx.lineJoin='round';ctx.lineWidth=Math.max(1,p*0.05);
+  ctx.strokeStyle='rgba(30,16,3,0.40)';ctx.stroke();
 }
 function drawColumn(y0,y1,hw,p){       /* straight turned stem segment */
   ctx.save();
@@ -566,10 +586,15 @@ function drawColumn(y0,y1,hw,p){       /* straight turned stem segment */
 }
 function sphereHi(cy,r,p){             /* spherical highlight on a knob/bulb */
   ctx.globalCompositeOperation='lighter';
-  var hx=-r*0.3*p, hy=(cy-r*0.4)*p, hr=r*0.95*p;
+  var hx=-r*0.32*p, hy=(cy-r*0.42)*p, hr=r*0.92*p;
   var g=ctx.createRadialGradient(hx,hy,0,hx,hy,hr);
-  g.addColorStop(0,'rgba(255,245,210,0.5)');g.addColorStop(1,'rgba(255,245,210,0)');
+  g.addColorStop(0,'rgba(255,248,222,0.55)');g.addColorStop(0.5,'rgba(255,240,200,0.18)');g.addColorStop(1,'rgba(255,245,210,0)');
   ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,hr,0,6.2832);ctx.fill();
+  // tiny sharp catch-light
+  var cr=r*0.16*p;
+  var g2=ctx.createRadialGradient(hx,hy,0,hx,hy,cr);
+  g2.addColorStop(0,'rgba(255,255,250,0.7)');g2.addColorStop(1,'rgba(255,255,250,0)');
+  ctx.fillStyle=g2;ctx.beginPath();ctx.arc(hx,hy,cr,0,6.2832);ctx.fill();
   ctx.globalCompositeOperation='source-over';
 }
 function ringGroove(y,hw,p){           /* engraved lathe ring */
@@ -579,56 +604,64 @@ function ringGroove(y,hw,p){           /* engraved lathe ring */
   ctx.strokeStyle='rgba(255,240,200,0.22)';
   ctx.beginPath();ctx.moveTo(-hw*p,(y+0.16)*p);ctx.lineTo(hw*p,(y+0.16)*p);ctx.stroke();
 }
-function drawBeak(s,p){                 /* small spout + dark cotton wick on the rim */
-  var dir=s<0?-1:(s>0?1:0);
+function drawBeak(s,p){                 /* elegant pointed spout + cotton wick on the rim */
+  var dir=s<0?-1:(s>0?1:0), lean=dir*0.6;    // outer spouts lean outward
+  // brass spout: rounded base at the rim narrowing to a fine lip that holds the wick
   ctx.beginPath();
-  ctx.moveTo((s-1.4)*p,-2.0*p);
-  ctx.quadraticCurveTo(s*p,-2.7*p,(s+1.4)*p,-2.0*p);
-  ctx.lineTo((s+0.6+dir*0.45)*p,-4.3*p);
-  ctx.quadraticCurveTo((s+dir*0.5)*p,-4.8*p,(s-0.6+dir*0.45)*p,-4.3*p);
+  ctx.moveTo((s-1.5)*p,-1.9*p);
+  ctx.quadraticCurveTo((s-0.2)*p,-2.8*p,(s+lean-0.55)*p,-4.6*p);  // left edge up to lip
+  ctx.quadraticCurveTo((s+lean)*p,-5.05*p,(s+lean+0.55)*p,-4.6*p);// rounded lip
+  ctx.quadraticCurveTo((s+0.2)*p,-2.8*p,(s+1.5)*p,-1.9*p);        // right edge down
+  ctx.quadraticCurveTo(s*p,-2.4*p,(s-1.5)*p,-1.9*p);              // base curve
   ctx.closePath();
-  ctx.fillStyle=brassGrad(s,1.6,p);ctx.fill();
-  ctx.lineWidth=Math.max(1,p*0.08);ctx.strokeStyle='rgba(40,22,6,0.55)';ctx.stroke();
-  ctx.fillStyle='#241308';ctx.fillRect((s-0.18)*p,-4.9*p,0.36*p,1.2*p);
+  ctx.fillStyle=brassGrad(s+lean*0.4,1.7,p);ctx.fill();
+  ctx.lineWidth=Math.max(1,p*0.05);ctx.strokeStyle='rgba(36,20,5,0.42)';ctx.stroke();
+  // bright lip highlight
+  ctx.globalCompositeOperation='lighter';
+  var lg=ctx.createLinearGradient((s+lean-0.5)*p,-4.7*p,(s+lean+0.5)*p,-4.4*p);
+  lg.addColorStop(0,'rgba(255,248,220,0)');lg.addColorStop(0.5,'rgba(255,250,232,0.5)');lg.addColorStop(1,'rgba(255,248,220,0)');
+  ctx.fillStyle=lg;ctx.fillRect((s+lean-0.6)*p,-4.9*p,1.2*p,0.7*p);
+  ctx.globalCompositeOperation='source-over';
+  // dark cotton wick nub
+  ctx.fillStyle='#2a1607';
+  ctx.beginPath();ctx.ellipse((s+lean)*p,-4.7*p,0.26*p,0.5*p,0,0,6.2832);ctx.fill();
 }
 
 /* draw the whole lamp (caller already translated to anchor / rotated); p = unit size */
 function drawLamp(p){
   drawTurned(E_BASE,p);
-  ringGroove(24.6,10.6,p); ringGroove(26.4,13.8,p);
-  drawColumn(17.8,19.3,1.25,p);
-  drawTurned(E_KNOB2,p); sphereHi(16.5,3.0,p);
-  drawColumn(12.2,15.3,1.12,p); ringGroove(13.7,1.12,p);
-  drawTurned(E_BULB,p);  sphereHi(11.0,2.8,p);
+  ringGroove(26.0,8.7,p);
+  drawTurned(E_KNOB2,p); sphereHi(18.6,2.74,p);
+  drawColumn(13.8,17.0,1.04,p); ringGroove(15.4,1.04,p);
+  drawTurned(E_BULB,p);  sphereHi(12.5,2.62,p);
   drawTurned(E_RIBS,p);                                   /* ribbed taper */
-  for(var rb=0;rb<6;rb++) ringGroove(6.8+rb*0.48, 1.46-rb*0.075, p);
-  drawTurned(E_KNOB1,p); sphereHi(5.4,2.15,p);
-  drawColumn(4.4,4.8,1.35,p);
+  for(var rb=0;rb<7;rb++) ringGroove(7.1+rb*0.58, 1.42-rb*0.055, p);
+  drawTurned(E_KNOB1,p); sphereHi(5.7,2.04,p);
   drawTurned(E_COLLAR,p);
   drawTurned(E_BOWL,p);
 
-  // recessed oil well (dark) with a warm reflection
-  ctx.beginPath();ctx.ellipse(0,-1.0*p,9.2*p,1.6*p,0,0,6.2832);
-  var ow=ctx.createRadialGradient(-2.6*p,-1.5*p,0,0,-1.0*p,9.2*p);
-  ow.addColorStop(0,'#6a4516');ow.addColorStop(0.55,'#33200a');ow.addColorStop(1,'#1b1106');
+  // recessed oil well (warm brass, gently lit) with a soft reflection
+  ctx.beginPath();ctx.ellipse(0,-1.1*p,9.0*p,1.6*p,0,0,6.2832);
+  var ow=ctx.createRadialGradient(-2.6*p,-1.7*p,0,0,-1.1*p,9.0*p);
+  ow.addColorStop(0,'#7d5520');ow.addColorStop(0.55,'#42290d');ow.addColorStop(1,'#241606');
   ctx.fillStyle=ow;ctx.fill();
-  ctx.lineWidth=Math.max(1,p*0.16);ctx.strokeStyle='rgba(18,10,4,0.55)';ctx.stroke();
+  ctx.lineWidth=Math.max(1,p*0.16);ctx.strokeStyle='rgba(18,10,4,0.5)';ctx.stroke();
   ctx.globalCompositeOperation='lighter';
-  var rf=ctx.createRadialGradient(2.2*p,-0.6*p,0,2.2*p,-0.6*p,4.2*p);
-  rf.addColorStop(0,'rgba(255,185,95,0.16)');rf.addColorStop(1,'rgba(255,185,95,0)');
-  ctx.fillStyle=rf;ctx.beginPath();ctx.ellipse(2.2*p,-0.6*p,4.2*p,0.9*p,0,0,6.2832);ctx.fill();
+  var rf=ctx.createRadialGradient(2.4*p,-0.7*p,0,2.4*p,-0.7*p,4.2*p);
+  rf.addColorStop(0,'rgba(255,190,100,0.2)');rf.addColorStop(1,'rgba(255,185,95,0)');
+  ctx.fillStyle=rf;ctx.beginPath();ctx.ellipse(2.4*p,-0.7*p,4.2*p,0.9*p,0,0,6.2832);ctx.fill();
   ctx.globalCompositeOperation='source-over';
 
   // bright rim crest (top half of the rim catching light)
   ctx.lineWidth=Math.max(1.5,p*0.22);
-  var rh=ctx.createLinearGradient(-11.6*p,0,11.6*p,0);
+  var rh=ctx.createLinearGradient(-11.4*p,0,11.4*p,0);
   rh.addColorStop(0,'rgba(255,240,200,0)');rh.addColorStop(0.5,'rgba(255,250,225,0.65)');rh.addColorStop(1,'rgba(255,240,200,0)');
   ctx.strokeStyle=rh;
-  ctx.beginPath();ctx.ellipse(0,-1.9*p,11.4*p,1.4*p,0,Math.PI,2*Math.PI);ctx.stroke();
+  ctx.beginPath();ctx.ellipse(0,-2.3*p,11.4*p,1.45*p,0,Math.PI,2*Math.PI);ctx.stroke();
 
   // central finial (vase + tall spire) rising from the bowl centre, behind the flames
-  drawColumn(-5.3,-0.8,0.78,p);
-  drawTurned(E_FINIAL,p); sphereHi(-8.5,2.5,p);
+  drawColumn(-5.5,-1.0,0.8,p);
+  drawTurned(E_FINIAL,p); sphereHi(-8.6,2.46,p);
 
   for(var w=0;w<SPOUTS.length;w++) drawBeak(SPOUTS[w],p);   // five wicks
 
@@ -659,7 +692,8 @@ function drawFlame(s,t,seed,p){
   var bx=s*p, by=FLAME_BASE*p;
   var f1=Math.sin(t*7.7+seed), f2=Math.sin(t*4.3+seed*1.7), f3=Math.sin(t*15.1+seed*0.7);
   var intensity=0.62+0.38*(0.6*f1+0.3*f2+0.1*f3);        // overall brightness 0.24..1
-  var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5; // tip lean (units)
+  var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5  // flicker lean (units)
+           + s*0.05;                                                       // outer wicks splay outward
   var h=(5.0+0.8*intensity+0.25*f2)*p;                   // flame height
   var wmax=(1.42+0.12*f3)*p;                             // half max width
   var tipx=bx+sway*p, tipy=by-h;
@@ -748,8 +782,7 @@ var lastT=now();
 function frame(){
   var tNow=now(), dt=Math.min(0.05,(tNow-lastT)/1000); lastT=tNow; var t=tNow/1000;
 
-  if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;} }
-  else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){enterVideo();} }
+  if(STATE==='finale'){ if(tNow-finaleStart>=CONFIG.FADE_DURATION){enterVideo();} }
 
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -777,8 +810,8 @@ function frame(){
 
   var m=lampMetrics(), p=m.p;
   var bloom=0;
-  if(STATE==='spin'){var st2=(tNow-spinStart)/CONFIG.SPIN_DURATION;bloom=Math.sin(Math.min(1,st2)*Math.PI)*0.9;}
-  else if(STATE==='hold'||STATE==='end'){bloom=0.25;}
+  if(STATE==='finale'){var st2=(tNow-finaleStart)/1100;bloom=Math.sin(Math.min(1,st2)*Math.PI)*0.7+0.18;}
+  else if(STATE==='end'){bloom=0.25;}
 
   // No lamp on the title gate (keeps headings legible) or during the video.
   if(STATE!=='gate' && STATE!=='video'){
@@ -786,13 +819,8 @@ function frame(){
     drawLampGlow(m,bloom);
 
     ctx.save();ctx.translate(m.ax,m.ay);
-    if(STATE==='spin'){
-      var stt=Math.min(1,(tNow-spinStart)/CONFIG.SPIN_DURATION), e=easeInOutCubic(stt);
-      var ang=e*CONFIG.TURNS*6.2832, sc=1+0.10*Math.sin(stt*Math.PI), pivY=12*p;
-      ctx.translate(0,pivY);ctx.rotate(ang);ctx.scale(sc,sc);ctx.translate(0,-pivY);
-    }
     drawLamp(p);
-    var showAll=(STATE==='spin'||STATE==='hold'||STATE==='end');
+    var showAll=(STATE==='finale'||STATE==='end');
     var n=showAll?CONFIG.WICK_COUNT:litCount;
     for(var k=0;k<n;k++) drawFlame(SPOUTS[k],t,k*2.1+0.5,p);
     ctx.restore();
@@ -913,10 +941,16 @@ function start(){
 function lightNext(){
   if(STATE!=='lighting'||litCount>=CONFIG.WICK_COUNT)return;
   playChime(litCount);spawnBurst(litCount);litCount++;updateDots();
-  if(litCount>=CONFIG.WICK_COUNT){promptEl.classList.remove('show');setTimeout(beginSpin,480);}
+  if(litCount>=CONFIG.WICK_COUNT){promptEl.classList.remove('show');setTimeout(beginFinale,480);}
 }
-function beginSpin(){if(STATE!=='lighting')return;STATE='spin';spinStart=now();playChord();spawnFlourish();spawnConfetti();
-  setTimeout(function(){revealEl.classList.add('show');},700);}
+/* finale: a soft golden flourish, reveal the title, then the lamp/scene gently
+   fades away leaving only the text — which in turn crossfades into the video. */
+function beginFinale(){
+  if(STATE!=='lighting')return;
+  STATE='finale';finaleStart=now();playChord();spawnFlourish();
+  setTimeout(function(){ if(STATE==='finale') revealEl.classList.add('show'); }, CONFIG.REVEAL_AT);
+  setTimeout(function(){ if(STATE==='finale') document.body.classList.add('dim-scene'); }, CONFIG.DIM_AT);
+}
 function enterVideo(){
   if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
   document.body.classList.add('to-video');   // commit to the crossfade
@@ -948,12 +982,12 @@ function attemptPlay(tries){
 function showClickToPlay(){ctpEl.classList.add('show');}
 function hideClickToPlay(){ctpEl.classList.remove('show');}
 function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
-  document.body.classList.remove('to-video');document.body.classList.add('native-cursor');hideClickToPlay();
+  document.body.classList.remove('to-video');document.body.classList.remove('dim-scene');document.body.classList.add('native-cursor');hideClickToPlay();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
   document.body.classList.remove('native-cursor');   // matchstick back for the rerun
-  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');hideClickToPlay();
+  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');document.body.classList.remove('dim-scene');hideClickToPlay();
   revealEl.classList.remove('show');promptEl.classList.remove('show');
   gateEl.style.display='flex';void gateEl.offsetWidth;gateEl.classList.remove('hide');
   try{ if(USE_LOCAL){localVid.pause();localVid.currentTime=0;} else if(player){player.stopVideo();player.seekTo(0,true);} }catch(e){}}
