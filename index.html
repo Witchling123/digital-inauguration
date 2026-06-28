@@ -122,6 +122,10 @@ canvas#fx{
 body.to-video #scene,body.to-video #lamp3d,body.to-video #fx,body.to-video #vignette,body.to-video #ui{opacity:0;}
 body.to-video #video{opacity:1;pointer-events:auto;}
 
+/* after the spin: fade the lamp + night away, leaving only the title — which then crossfades to the video */
+body.dim-lamp #scene,body.dim-lamp #lamp3d,body.dim-lamp #fx,body.dim-lamp #vignette{opacity:0;}
+body.dim-lamp #dots{opacity:0;transition:opacity .6s ease;}
+
 /* click-to-play fallback */
 #clicktoplay{
   position:fixed;inset:0;z-index:7;display:none;
@@ -867,7 +871,9 @@ function frame(){
   var tNow=now(), dt=Math.min(0.05,(tNow-lastT)/1000); lastT=tNow; var t=tNow/1000;
 
   // ---- state timing: spin -> hold -> video ----
-  if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;} }
+  if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;
+    document.body.classList.add('dim-lamp');   // spin done -> fade the lamp/scene out, leaving the title
+  } }
   else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){enterVideo();} }
 
   // spin angle (ease-accelerate then smooth stop), flame fade-to-bloom, bloom amount
@@ -1107,13 +1113,13 @@ function showClickToPlay(){ctpEl.classList.add('show');}
 function hideClickToPlay(){ctpEl.classList.remove('show');}
 function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
   if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);
-  document.body.classList.remove('to-video');document.body.classList.add('native-cursor');hideClickToPlay();
+  document.body.classList.remove('to-video');document.body.classList.remove('dim-lamp');document.body.classList.add('native-cursor');hideClickToPlay();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
   if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);   // unwind the turntable
   document.body.classList.remove('native-cursor');   // matchstick back for the rerun
-  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');hideClickToPlay();
+  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');document.body.classList.remove('dim-lamp');hideClickToPlay();
   revealEl.classList.remove('show');promptEl.classList.remove('show');
   gateEl.style.display='flex';void gateEl.offsetWidth;gateEl.classList.remove('hide');
   try{ if(USE_LOCAL){localVid.pause();localVid.currentTime=0;} else if(player){player.stopVideo();player.seekTo(0,true);} }catch(e){}}
