@@ -1,0 +1,2 @@
+# Keep the vendored three.js byte-identical to upstream (no EOL conversion).
+vendor/** -text

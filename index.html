@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<!-- three.js vendored locally (offline-safe, pinned r161). Loaded as an ES module via import map. -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
 <style>
 /* =================================================================
    BEHAVIOUR CHANGE CONCLAVE — DIGITAL INAUGURATION
@@ -35,19 +39,31 @@ html,body{
   touch-action:manipulation;
   -webkit-font-smoothing:antialiased;
 }
+/* THREE STACKED FULL-VIEWPORT LAYERS:
+   #scene  (z1) — 2D backdrop: night, stars, embers, ambient glow + 2D fallback lamp
+   #lamp3d (z2) — transparent WebGL canvas: the real 3D brass lamp
+   #fx     (z3) — 2D overlay: flames, particles, glow bloom, confetti  */
 canvas#scene{
   position:fixed;inset:0;width:100vw;height:100vh;display:block;
   image-rendering:auto;
   z-index:1;transition:opacity .85s ease;
 }
+canvas#lamp3d{
+  position:fixed;inset:0;width:100vw;height:100vh;display:block;
+  z-index:2;pointer-events:none;transition:opacity .85s ease;
+}
+canvas#fx{
+  position:fixed;inset:0;width:100vw;height:100vh;display:block;
+  z-index:3;pointer-events:none;transition:opacity .85s ease;
+}
 #vignette{
-  position:fixed;inset:0;z-index:2;pointer-events:none;
+  position:fixed;inset:0;z-index:4;pointer-events:none;
   background:radial-gradient(125% 100% at 50% 40%, rgba(0,0,0,0) 36%, rgba(20,5,16,.40) 76%, rgba(12,3,10,.72) 100%);
   transition:opacity .85s ease;
 }
 
 /* ---------- UI overlay (text + dots), click-through ---------- */
-#ui{position:fixed;inset:0;z-index:3;pointer-events:none;transition:opacity .85s ease;}
+#ui{position:fixed;inset:0;z-index:5;pointer-events:none;transition:opacity .85s ease;}
 
 #prompt{
   position:absolute;left:0;right:0;bottom:14.5vh;text-align:center;
@@ -99,21 +115,16 @@ canvas#scene{
 
 /* ---------- YouTube video layer ---------- */
 #video{
-  position:fixed;inset:0;z-index:5;background:#000;
+  position:fixed;inset:0;z-index:6;background:#000;
   opacity:0;pointer-events:none;transition:opacity .85s ease;
 }
 #video iframe,#video #ytplayer,#video #localvideo{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;object-fit:contain;}
-body.to-video #scene,body.to-video #vignette,body.to-video #ui{opacity:0;}
+body.to-video #scene,body.to-video #lamp3d,body.to-video #fx,body.to-video #vignette,body.to-video #ui{opacity:0;}
 body.to-video #video{opacity:1;pointer-events:auto;}
-
-/* finale: fade the lamp/scene away, leaving only the revealed title */
-#scene,#vignette{transition:opacity 1.3s ease;}
-body.dim-scene #scene,body.dim-scene #vignette{opacity:0;}
-body.dim-scene #dots{opacity:0;transition:opacity .6s ease;}
 
 /* click-to-play fallback */
 #clicktoplay{
-  position:fixed;inset:0;z-index:6;display:none;
+  position:fixed;inset:0;z-index:7;display:none;
   align-items:center;justify-content:center;flex-direction:column;gap:3vh;
   background:radial-gradient(120% 120% at 50% 50%, rgba(110,26,58,.6), rgba(20,5,16,.94));
   cursor:none;
@@ -236,6 +247,8 @@ body.native-cursor #clicktoplay{cursor:default;}
 </head>
 <body>
   <canvas id="scene"></canvas>
+  <canvas id="lamp3d"></canvas>
+  <canvas id="fx"></canvas>
   <div id="vignette"></div>
 
   <div id="ui">
@@ -292,9 +305,9 @@ var CONFIG = {
      that causes "error 153". To use YouTube you MUST serve over http, e.g. run
      `python -m http.server` in this folder and open http://localhost:8000 .     */
   WICK_COUNT      : 5,
-  REVEAL_AT       : 350,    // ms after all-lit — fade the initiative title in
-  DIM_AT          : 1900,   // ms — begin fading the lamp/scene out, leaving the text
-  FADE_DURATION   : 4400    // ms total on the finale before crossfading into the video
+  SPIN_DURATION   : 2600,   // ms — ceremonial turntable spin of the 3D lamp
+  HOLD_DURATION   : 3000,   // ms — beat on the "all lit" + title before the video
+  TURNS           : 3       // full Y-axis turns (integer => the five beaks end facing front)
 };
 /* Do NOT hardcode stakeholder names. Five wicks, five dots, no names on screen. */
 
@@ -316,16 +329,25 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 /* =======================================================================
    ============================  STATE  ==================================
    ======================================================================= */
-var STATE = 'gate';           // gate | lighting | finale | video | end
+var STATE = 'gate';           // gate | lighting | spin | hold | video | end
 var litCount = 0, muted = false;
-var finaleStart = 0;
+var spinStart = 0, holdStart = 0;
+
+/* shared lamp anchor for the overlay (flames, glow, bursts). Updated each frame
+   from the 3D projection when WebGL is active, or from lampMetrics in fallback. */
+var WICKS = [];               // [{x,y,vis,lean}] screen positions of the five wick tips
+var PPU = 10;                 // overlay pixels per lamp-unit (flame sizing)
+var LAMPCX = 0, LAMPCY = 0;   // bowl centre on screen (glow / flourish origin)
 var now = (typeof performance!=='undefined' && performance.now) ? function(){return performance.now();} : function(){return +new Date();};
 
 /* =======================================================================
    ========================  CANVAS / RENDER  ============================
    ======================================================================= */
-var canvas = document.getElementById('scene');
+var canvas = document.getElementById('scene');     // back: backdrop/stars/embers (+2D fallback lamp)
 var ctx = canvas.getContext('2d');
+var fcanvas = document.getElementById('fx');        // front: flames/particles/glow/confetti
+var fctx = fcanvas.getContext('2d');
+var lamp3dCanvas = document.getElementById('lamp3d');
 var W=0, H=0, DPR=1;
 
 function resize(){
@@ -334,6 +356,10 @@ function resize(){
   canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
   canvas.style.width=W+'px'; canvas.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  fcanvas.width=Math.round(W*DPR); fcanvas.height=Math.round(H*DPR);
+  fcanvas.style.width=W+'px'; fcanvas.style.height=H+'px';
+  fctx.setTransform(DPR,0,0,DPR,0,0);
+  if(window.LAMP3D && window.LAMP3D.setSize) window.LAMP3D.setSize(W,H,DPR);
   buildStars();
 }
 window.addEventListener('resize', resize);
@@ -364,25 +390,26 @@ function buildStars(){
 /* ---------- particles + rings ---------- */
 var particles=[], rings=[];
 function spawnBurst(idx){
-  var m=lampMetrics();
-  var sx=m.ax+SPOUTS[idx]*m.p, sy=m.ay+FLAME_BASE*m.p;
+  var w=WICKS[idx], p=PPU;
+  var sx, sy;
+  if(w){ sx=w.x; sy=w.y; } else { var m=lampMetrics(); p=m.p; sx=m.ax+SPOUTS[idx]*m.p; sy=m.ay+FLAME_BASE*m.p; }
   var cols=['#fff7cf','#ffd24a','#ff8a1e','#e8602c','#AC2251','#F3E9EF'];
   for(var i=0;i<28;i++){
     var ang=rnd(-Math.PI,0), spd=rnd(40,185);
     particles.push({x:sx,y:sy,vx:Math.cos(ang)*spd*rnd(0.6,1.2),vy:Math.sin(ang)*spd-rnd(20,95),
-      life:0,max:rnd(0.6,1.3),size:m.p*rnd(0.16,0.4),col:cols[(Math.random()*cols.length)|0],g:rnd(110,250)});
+      life:0,max:rnd(0.6,1.3),size:p*rnd(0.16,0.4),col:cols[(Math.random()*cols.length)|0],g:rnd(110,250)});
   }
-  rings.push({x:sx,y:sy,life:0,max:0.7,r0:m.p*0.6,r1:m.p*7.5});
+  rings.push({x:sx,y:sy,life:0,max:0.7,r0:p*0.6,r1:p*7.5});
 }
 function spawnFlourish(){
-  var m=lampMetrics(), cx=m.ax, cy=m.ay+14*m.p;
+  var cx=LAMPCX, cy=LAMPCY, p=PPU;
   var cols=['#fff7cf','#ffd24a','#ff8a1e','#e8602c','#AC2251','#9d1c4a','#F3E9EF'];
   for(var i=0;i<140;i++){
     var ang=rnd(0,6.2832), spd=rnd(120,480);
     particles.push({x:cx,y:cy,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd-50,
-      life:0,max:rnd(0.9,1.9),size:m.p*rnd(0.15,0.48),col:cols[(Math.random()*cols.length)|0],g:rnd(50,150)});
+      life:0,max:rnd(0.9,1.9),size:p*rnd(0.15,0.48),col:cols[(Math.random()*cols.length)|0],g:rnd(50,150)});
   }
-  rings.push({x:cx,y:cy-3*m.p,life:0,max:1.4,r0:m.p*1,r1:Math.max(W,H)*0.55});
+  rings.push({x:cx,y:cy,life:0,max:1.4,r0:p*1,r1:Math.max(W,H)*0.55});
 }
 function updateParticles(dt){
   for(var i=particles.length-1;i>=0;i--){var p=particles[i];p.life+=dt;
@@ -391,20 +418,20 @@ function updateParticles(dt){
   for(var r=rings.length-1;r>=0;r--){rings[r].life+=dt; if(rings[r].life>=rings[r].max) rings.splice(r,1);}
 }
 function drawParticles(){
-  ctx.globalCompositeOperation='lighter';
+  fctx.globalCompositeOperation='lighter';
   for(var i=0;i<particles.length;i++){var p=particles[i];var k=1-p.life/p.max;
-    ctx.globalAlpha=Math.max(0,k);var s=Math.max(1,p.size*(0.55+0.45*k));
-    ctx.fillStyle=p.col;ctx.fillRect(Math.round(p.x),Math.round(p.y),Math.ceil(s),Math.ceil(s));}
-  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    fctx.globalAlpha=Math.max(0,k);var s=Math.max(1,p.size*(0.55+0.45*k));
+    fctx.fillStyle=p.col;fctx.fillRect(Math.round(p.x),Math.round(p.y),Math.ceil(s),Math.ceil(s));}
+  fctx.globalAlpha=1;fctx.globalCompositeOperation='source-over';
 }
 function drawRings(){
-  ctx.globalCompositeOperation='lighter';
+  fctx.globalCompositeOperation='lighter';
   for(var i=0;i<rings.length;i++){var rg=rings[i];var k=rg.life/rg.max;var e=1-Math.pow(1-k,3);
     var rad=rg.r0+(rg.r1-rg.r0)*e;
-    ctx.globalAlpha=Math.max(0,0.5*(1-k));
-    ctx.strokeStyle='rgba(255,205,110,1)';ctx.lineWidth=Math.max(1.5,rg.r1*0.012*(1-k)+1.5);
-    ctx.beginPath();ctx.arc(rg.x,rg.y,rad,0,6.2832);ctx.stroke();}
-  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    fctx.globalAlpha=Math.max(0,0.5*(1-k));
+    fctx.strokeStyle='rgba(255,205,110,1)';fctx.lineWidth=Math.max(1.5,rg.r1*0.012*(1-k)+1.5);
+    fctx.beginPath();fctx.arc(rg.x,rg.y,rad,0,6.2832);fctx.stroke();}
+  fctx.globalAlpha=1;fctx.globalCompositeOperation='source-over';
 }
 
 /* ---------- confetti (fires when the lamp spins) ---------- */
@@ -416,7 +443,7 @@ function mkConfetti(x,y,vx,vy){
     life:0,max:rnd(3.8,6.2),fp:rnd(0,6.2832),fa:rnd(1.6,3.6)};
 }
 function spawnConfetti(){
-  var m=lampMetrics(), cx=m.ax, cy=m.ay+2*m.p;
+  var cx=LAMPCX, cy=LAMPCY;
   for(var i=0;i<150;i++){                 // celebratory burst from the lamp
     var ang=-Math.PI/2+rnd(-1.15,1.15), spd=rnd(280,720);
     confetti.push(mkConfetti(cx+rnd(-22,22), cy, Math.cos(ang)*spd, Math.sin(ang)*spd-rnd(0,120)));
@@ -432,12 +459,12 @@ function updateConfetti(dt){
 }
 function drawConfetti(){
   for(var i=0;i<confetti.length;i++){var c=confetti[i];var k=c.life/c.max;
-    ctx.globalAlpha=k>0.82?Math.max(0,1-(k-0.82)/0.18):1;
-    ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);ctx.fillStyle=c.col;
+    fctx.globalAlpha=k>0.82?Math.max(0,1-(k-0.82)/0.18):1;
+    fctx.save();fctx.translate(c.x,c.y);fctx.rotate(c.rot);fctx.fillStyle=c.col;
     var flut=Math.abs(Math.cos(c.life*c.fa+c.fp));      // paper flip
-    ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h*(0.35+0.65*flut));
-    ctx.restore();}
-  ctx.globalAlpha=1;
+    fctx.fillRect(-c.w/2,-c.h/2,c.w,c.h*(0.35+0.65*flut));
+    fctx.restore();}
+  fctx.globalAlpha=1;
 }
 
 /* =======================================================================
@@ -731,81 +758,83 @@ function drawLamp(p){
   }
 }
 
-/* smooth leaning teardrop outline: rounded base at (bx,by) -> point at tip */
+/* smooth leaning teardrop outline (front overlay): rounded base -> point at tip */
 function flameOutline(bx,by,tipx,tipy,wmax){
   var midy=by+(tipy-by)*0.40;
-  ctx.beginPath();
-  ctx.moveTo(bx-wmax*0.3,by);
-  ctx.quadraticCurveTo(bx-wmax, midy, tipx, tipy);       // left edge swells, draws to tip
-  ctx.quadraticCurveTo(bx+wmax, midy, bx+wmax*0.3,by);   // right edge back down
-  ctx.quadraticCurveTo(bx, by+wmax*0.45, bx-wmax*0.3,by);// rounded bottom
-  ctx.closePath();
+  fctx.beginPath();
+  fctx.moveTo(bx-wmax*0.3,by);
+  fctx.quadraticCurveTo(bx-wmax, midy, tipx, tipy);       // left edge swells, draws to tip
+  fctx.quadraticCurveTo(bx+wmax, midy, bx+wmax*0.3,by);   // right edge back down
+  fctx.quadraticCurveTo(bx, by+wmax*0.45, bx-wmax*0.3,by);// rounded bottom
+  fctx.closePath();
 }
-/* realistic oil-lamp flame: layered emissive teardrops (amber body, golden
-   inner, white-hot core, blue wick base) with a soft halo, all flickering */
-function drawFlame(s,t,seed,p){
-  var bx=s*p, by=FLAME_BASE*p;
+/* realistic oil-lamp flame drawn at an absolute screen point (x,y) — the flame
+   bridge: in 3D the point is the projected wick tip, in 2D the SPOUT position.
+   p = pixels per lamp-unit, lean = horizontal splay (units), fa = fade alpha. */
+function drawFlameAt(x,y,p,t,seed,lean,fa){
+  var bx=x, by=y;
   var f1=Math.sin(t*7.7+seed), f2=Math.sin(t*4.3+seed*1.7), f3=Math.sin(t*15.1+seed*0.7);
   var intensity=0.62+0.38*(0.6*f1+0.3*f2+0.1*f3);        // overall brightness 0.24..1
-  var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5  // flicker lean (units)
-           + s*0.05;                                                       // outer wicks splay outward
+  var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5 + (lean||0);
   var h=(5.0+0.8*intensity+0.25*f2)*p;                   // flame height
   var wmax=(1.42+0.12*f3)*p;                             // half max width
   var tipx=bx+sway*p, tipy=by-h;
 
-  ctx.save();
-  ctx.globalCompositeOperation='lighter';
+  fctx.save();
+  fctx.globalAlpha=(fa==null?1:fa);
+  fctx.globalCompositeOperation='lighter';
 
   // 1. soft outer halo / torch glow
   var hr=h*1.15, hy=by-h*0.42;
-  var hg=ctx.createRadialGradient(bx,hy,0,bx,hy,hr);
+  var hg=fctx.createRadialGradient(bx,hy,0,bx,hy,hr);
   hg.addColorStop(0,'rgba(255,170,70,'+(0.30*intensity)+')');
   hg.addColorStop(0.5,'rgba(255,120,40,'+(0.14*intensity)+')');
   hg.addColorStop(1,'rgba(230,80,30,0)');
-  ctx.fillStyle=hg;ctx.beginPath();ctx.arc(bx,hy,hr,0,6.2832);ctx.fill();
+  fctx.fillStyle=hg;fctx.beginPath();fctx.arc(bx,hy,hr,0,6.2832);fctx.fill();
 
   // 2. outer flame body — deep amber fading to the point
   flameOutline(bx,by,tipx,tipy,wmax);
-  var og=ctx.createLinearGradient(0,by,0,tipy);
+  var og=fctx.createLinearGradient(0,by,0,tipy);
   og.addColorStop(0.00,'rgba(255,120,24,0.50)');
   og.addColorStop(0.45,'rgba(255,140,32,0.60)');
   og.addColorStop(0.80,'rgba(255,96,24,0.28)');
   og.addColorStop(1.00,'rgba(220,60,20,0)');
-  ctx.fillStyle=og;ctx.fill();
+  fctx.fillStyle=og;fctx.fill();
 
   // 3. inner flame — golden yellow
   var iw=wmax*0.58, ih=h*0.74, itipy=by-ih, itipx=bx+sway*p*0.7;
   flameOutline(bx,by,itipx,itipy,iw);
-  var ig=ctx.createLinearGradient(0,by,0,itipy);
+  var ig=fctx.createLinearGradient(0,by,0,itipy);
   ig.addColorStop(0.00,'rgba(255,205,86,0.60)');
   ig.addColorStop(0.50,'rgba(255,234,150,0.85)');
   ig.addColorStop(1.00,'rgba(255,205,90,0)');
-  ctx.fillStyle=ig;ctx.fill();
+  fctx.fillStyle=ig;fctx.fill();
 
   // 4. white-hot core low in the flame
   var cw=wmax*0.34, ch=h*0.42, ctipy=by-ch;
   flameOutline(bx,by,bx+sway*p*0.4,ctipy,cw);
-  var cg=ctx.createLinearGradient(0,by,0,ctipy);
+  var cg=fctx.createLinearGradient(0,by,0,ctipy);
   cg.addColorStop(0.00,'rgba(255,250,236,'+(0.72*intensity)+')');
   cg.addColorStop(0.55,'rgba(255,247,224,'+(0.88*intensity)+')');
   cg.addColorStop(1.00,'rgba(255,238,196,0)');
-  ctx.fillStyle=cg;ctx.fill();
+  fctx.fillStyle=cg;fctx.fill();
 
   // 5. cool blue/translucent base hugging the wick
   var br=wmax*1.05, bcy=by-0.15*p;
-  var bg=ctx.createRadialGradient(bx,bcy,0,bx,bcy,br);
+  var bg=fctx.createRadialGradient(bx,bcy,0,bx,bcy,br);
   bg.addColorStop(0.00,'rgba(120,160,255,'+(0.40*intensity)+')');
   bg.addColorStop(0.65,'rgba(90,120,230,0.12)');
   bg.addColorStop(1.00,'rgba(90,120,230,0)');
-  ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx,bcy,br,0,6.2832);ctx.fill();
+  fctx.fillStyle=bg;fctx.beginPath();fctx.arc(bx,bcy,br,0,6.2832);fctx.fill();
 
-  ctx.restore();
+  fctx.restore();
 }
 
-function drawLampGlow(m,extra){
+/* warm torch-glow wash behind the lamp (drawn on the BACK canvas) */
+function drawLampGlow(cx,cy,p,extra){
   var litK=litCount/CONFIG.WICK_COUNT, amp=0.18+0.82*litK+(extra||0);
   if(amp<=0.01)return;
-  var cx=m.ax, cy=m.ay-1*m.p, rad=m.p*(10+27*litK)+(extra||0)*m.p*42;
+  var rad=p*(10+27*litK)+(extra||0)*p*42;
   ctx.globalCompositeOperation='lighter';
   var g=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
   g.addColorStop(0,'rgba(255,231,160,'+(0.42*amp)+')');
@@ -837,20 +866,35 @@ var lastT=now();
 function frame(){
   var tNow=now(), dt=Math.min(0.05,(tNow-lastT)/1000); lastT=tNow; var t=tNow/1000;
 
-  if(STATE==='finale'){ if(tNow-finaleStart>=CONFIG.FADE_DURATION){enterVideo();} }
+  // ---- state timing: spin -> hold -> video ----
+  if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;} }
+  else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){enterVideo();} }
 
+  // spin angle (ease-accelerate then smooth stop), flame fade-to-bloom, bloom amount
+  var spinProg=0, spinAngle=0, flameAlpha=1, bloom=0;
+  if(STATE==='spin'){
+    spinProg=Math.min(1,(tNow-spinStart)/CONFIG.SPIN_DURATION);
+    spinAngle=easeInOutCubic(spinProg)*CONFIG.TURNS*6.2832;   // integer turns => ends facing front
+    flameAlpha=Math.max(0,1-spinProg*1.7);                    // dissolve discrete flames into the bloom
+    bloom=Math.sin(spinProg*Math.PI)*0.95;
+  } else if(STATE==='hold'){
+    var hp=Math.min(1,(tNow-holdStart)/CONFIG.HOLD_DURATION);
+    flameAlpha=Math.min(1,hp/0.28);                           // flames settle back as the lamp stops
+    bloom=0.12+0.22*(1-Math.min(1,hp/0.4));
+  } else if(STATE==='end'){ flameAlpha=1; bloom=0.2; }
+
+  var lamp3dReady = !!(window.LAMP3D && window.LAMP3D.ok);
+  lamp3dCanvas.style.visibility = lamp3dReady ? 'visible' : 'hidden';
+
+  /* ===================== BACK CANVAS: night + ambient ===================== */
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
   drawBackdrop(t);
-
-  // stars
   for(var i=0;i<stars.length;i++){var st=stars[i];
     ctx.globalAlpha=st.a*(0.5+0.5*Math.sin(t*st.sp+st.tw));
     ctx.fillStyle=(i%6===0)?'#fff0e6':'#e7b9c8';
     ctx.fillRect(st.x,st.y,st.s,st.s);}
   ctx.globalAlpha=1;
-
-  // embers
   ctx.globalCompositeOperation='lighter';
   for(var f=0;f<embers.length;f++){var fl=embers[f];
     fl.x+=fl.vx*dt;fl.y+=fl.vy*dt;fl.vx+=rnd(-6,6)*dt;fl.vy+=rnd(-5,3)*dt;
@@ -864,21 +908,46 @@ function frame(){
   ctx.globalCompositeOperation='source-over';
 
   var m=lampMetrics(), p=m.p;
-  var bloom=0;
-  if(STATE==='finale'){var st2=(tNow-finaleStart)/1100;bloom=Math.sin(Math.min(1,st2)*Math.PI)*0.7+0.18;}
-  else if(STATE==='end'){bloom=0.25;}
+  // sensible defaults for the overlay anchor (used by 2D fallback + before 3D is ready)
+  LAMPCX=m.ax; LAMPCY=m.ay-1*p; PPU=p;
+  WICKS.length=0;
+  for(var s=0;s<SPOUTS.length;s++) WICKS.push({x:m.ax+SPOUTS[s]*p, y:m.ay+FLAME_BASE*p, vis:true, lean:SPOUTS[s]*0.05});
 
-  // No lamp on the title gate (keeps headings legible) or during the video.
-  if(STATE!=='gate' && STATE!=='video'){
+  var showLamp = (STATE!=='gate' && STATE!=='video');
+  if(showLamp){
     drawFloorPool(m,bloom);
-    drawLampGlow(m,bloom);
 
-    ctx.save();ctx.translate(m.ax,m.ay);
-    drawLamp(p);
-    var showAll=(STATE==='finale'||STATE==='end');
+    if(lamp3dReady){
+      // ----- real 3D lamp: spin it, render it, read back the wick projections -----
+      window.LAMP3D.setSpin(spinAngle);
+      window.LAMP3D.render(t);
+      var pr=window.LAMP3D.project();           // {wicks:[{x,y,vis,lean}], bowl:{x,y}, ppu}
+      if(pr){
+        WICKS=pr.wicks; PPU=pr.ppu; LAMPCX=pr.bowl.x; LAMPCY=pr.bowl.y;
+      }
+    } else {
+      // ----- 2D fallback lamp (drawn on the back canvas) -----
+      ctx.save();ctx.translate(m.ax,m.ay);
+      if(STATE==='spin'){                       // a gentle flat spin so the ceremony still reads
+        var pivY=12*p, sc=1+0.08*Math.sin(spinProg*Math.PI);
+        ctx.translate(0,pivY);ctx.rotate(spinAngle);ctx.scale(sc,sc);ctx.translate(0,-pivY);
+      }
+      drawLamp(p);
+      ctx.restore();
+    }
+    drawLampGlow(LAMPCX,LAMPCY,p,bloom);
+  }
+
+  /* ===================== FRONT CANVAS: flames + fx ===================== */
+  fctx.setTransform(DPR,0,0,DPR,0,0);
+  fctx.globalAlpha=1;fctx.globalCompositeOperation='source-over';
+  fctx.clearRect(0,0,W,H);
+
+  if(showLamp && flameAlpha>0.01){
+    var showAll=(STATE==='spin'||STATE==='hold'||STATE==='end');
     var n=showAll?CONFIG.WICK_COUNT:litCount;
-    for(var k=0;k<n;k++) drawFlame(SPOUTS[k],t,k*2.1+0.5,p);
-    ctx.restore();
+    for(var k=0;k<n;k++){ var wk=WICKS[k]; if(wk && wk.vis!==false)
+      drawFlameAt(wk.x,wk.y,PPU,t,k*2.1+0.5,wk.lean||0,flameAlpha); }
   }
 
   updateParticles(dt);
@@ -887,14 +956,14 @@ function frame(){
   drawParticles();
 
   if(bloom>0.01){
-    ctx.globalCompositeOperation='lighter';
-    var bx=m.ax,by=m.ay-1*p,br=Math.max(W,H)*0.7*bloom;
-    var bg=ctx.createRadialGradient(bx,by,0,bx,by,br);
+    fctx.globalCompositeOperation='lighter';
+    var br=Math.max(W,H)*0.7*bloom;
+    var bg=fctx.createRadialGradient(LAMPCX,LAMPCY,0,LAMPCX,LAMPCY,br);
     bg.addColorStop(0,'rgba(255,236,176,'+(0.22*bloom)+')');
     bg.addColorStop(0.5,'rgba(232,96,44,'+(0.1*bloom)+')');
     bg.addColorStop(1,'rgba(172,34,81,0)');
-    ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx,by,br,0,6.2832);ctx.fill();
-    ctx.globalCompositeOperation='source-over';
+    fctx.fillStyle=bg;fctx.beginPath();fctx.arc(LAMPCX,LAMPCY,br,0,6.2832);fctx.fill();
+    fctx.globalCompositeOperation='source-over';
   }
   drawConfetti();   // confetti rides on top of everything
   requestAnimationFrame(frame);
@@ -998,13 +1067,13 @@ function lightNext(){
   playChime(litCount);spawnBurst(litCount);litCount++;updateDots();
   if(litCount>=CONFIG.WICK_COUNT){promptEl.classList.remove('show');setTimeout(beginFinale,480);}
 }
-/* finale: a soft golden flourish, reveal the title, then the lamp/scene gently
-   fades away leaving only the text — which in turn crossfades into the video. */
+/* finale: a real Y-axis turntable spin of the brass lamp (reflections sweep across
+   it), the five flames dissolving into a single radiant bloom + flourish, then the
+   initiative title resolves and holds before the existing crossfade to the video. */
 function beginFinale(){
   if(STATE!=='lighting')return;
-  STATE='finale';finaleStart=now();playChord();spawnFlourish();
-  setTimeout(function(){ if(STATE==='finale') revealEl.classList.add('show'); }, CONFIG.REVEAL_AT);
-  setTimeout(function(){ if(STATE==='finale') document.body.classList.add('dim-scene'); }, CONFIG.DIM_AT);
+  STATE='spin';spinStart=now();playChord();spawnFlourish();spawnConfetti();
+  setTimeout(function(){ if(STATE==='spin'||STATE==='hold') revealEl.classList.add('show'); }, 850);
 }
 function enterVideo(){
   if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
@@ -1037,12 +1106,14 @@ function attemptPlay(tries){
 function showClickToPlay(){ctpEl.classList.add('show');}
 function hideClickToPlay(){ctpEl.classList.remove('show');}
 function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
-  document.body.classList.remove('to-video');document.body.classList.remove('dim-scene');document.body.classList.add('native-cursor');hideClickToPlay();
+  if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);
+  document.body.classList.remove('to-video');document.body.classList.add('native-cursor');hideClickToPlay();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);   // unwind the turntable
   document.body.classList.remove('native-cursor');   // matchstick back for the rerun
-  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');document.body.classList.remove('dim-scene');hideClickToPlay();
+  clearTimeout(autoplayTimer);document.body.classList.remove('to-video');hideClickToPlay();
   revealEl.classList.remove('show');promptEl.classList.remove('show');
   gateEl.style.display='flex';void gateEl.offsetWidth;gateEl.classList.remove('hide');
   try{ if(USE_LOCAL){localVid.pause();localVid.currentTime=0;} else if(player){player.stopVideo();player.seekTo(0,true);} }catch(e){}}
@@ -1080,6 +1151,178 @@ document.addEventListener('pointermove',function(e){cx2=e.clientX;cy2=e.clientY;
 buildDots();updateDots();resize();requestAnimationFrame(frame);
 /* dev/screenshot helper: open with ?shot to jump straight to the lit lamp */
 if(/[?&]shot/.test(location.search)){ STATE='end'; litCount=CONFIG.WICK_COUNT; updateDots(); gateEl.classList.add('hide'); gateEl.style.display='none'; }
+</script>
+
+<!-- =======================================================================
+     ============  REAL 3D BRASS LAMP (three.js, ES module)  ===============
+     Replaces only the lamp BODY + spin. Reads the 2D profile globals, revolves
+     them into one lathe, lights it with a procedural environment map, and
+     exposes window.LAMP3D for the classic loop. Falls back to the 2D lamp if
+     WebGL is unavailable or the context is lost.
+     ======================================================================= -->
+<script type="module">
+import * as THREE from 'three';
+
+(function(){
+  var canvas = document.getElementById('lamp3d');
+  var renderer;
+  try{
+    renderer = new THREE.WebGLRenderer({canvas:canvas, alpha:true, antialias:true, premultipliedAlpha:true, powerPreference:'high-performance'});
+    if(!renderer.getContext()) throw new Error('no gl context');
+  }catch(e){ window.LAMP3D = {ok:false}; return; }
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.75));
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  renderer.setClearColor(0x000000, 0);
+
+  var scene  = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(30, window.innerWidth/window.innerHeight, 0.1, 100);
+
+  /* ---------- procedural environment: a dark room with a bright key band up top
+     and a warm magenta/gold floor bounce below. As the lamp turns, these sweep
+     across the polished brass — which is what sells it as real metal. ---------- */
+  function makeEnvCanvas(){
+    var c=document.createElement('canvas'); c.width=1024; c.height=512; var g=c.getContext('2d');
+    var base=g.createLinearGradient(0,0,0,512);             // warm-dark room (not pure black -> brass keeps colour)
+    base.addColorStop(0.00,'#26242c'); base.addColorStop(0.42,'#191720');
+    base.addColorStop(0.60,'#15101a'); base.addColorStop(1.00,'#26131d');
+    g.fillStyle=base; g.fillRect(0,0,1024,512);
+    var k=g.createRadialGradient(360,150,8, 360,150,400);   // soft warm key light / window
+    k.addColorStop(0,'rgba(255,247,228,1)'); k.addColorStop(0.5,'rgba(248,232,200,0.5)'); k.addColorStop(1,'rgba(248,232,200,0)');
+    g.fillStyle=k; g.fillRect(0,0,1024,340);
+    var kw=g.createLinearGradient(0,40,0,200);              // gentle sky band (subtle overall lift)
+    kw.addColorStop(0,'rgba(214,212,200,0.28)'); kw.addColorStop(1,'rgba(214,212,200,0)');
+    g.fillStyle=kw; g.fillRect(0,40,1024,160);
+    var k2=g.createRadialGradient(826,120,6, 826,120,300);  // cool fill, upper-right
+    k2.addColorStop(0,'rgba(205,222,255,0.72)'); k2.addColorStop(1,'rgba(205,222,255,0)');
+    g.fillStyle=k2; g.fillRect(0,0,1024,330);
+    var fb=g.createLinearGradient(0,330,0,512);             // warm brand floor bounce
+    fb.addColorStop(0,'rgba(150,40,70,0)'); fb.addColorStop(0.5,'rgba(178,56,62,0.45)'); fb.addColorStop(1,'rgba(232,150,70,0.62)');
+    g.fillStyle=fb; g.fillRect(0,330,1024,182);
+    return c;
+  }
+  var pmrem = new THREE.PMREMGenerator(renderer);
+  var envSrc = new THREE.CanvasTexture(makeEnvCanvas());
+  envSrc.mapping = THREE.EquirectangularReflectionMapping;
+  envSrc.colorSpace = THREE.SRGBColorSpace;
+  var envRT = pmrem.fromEquirectangular(envSrc);
+  scene.environment = envRT.texture;
+  envSrc.dispose(); pmrem.dispose();
+
+  /* ---------- brass material with faint procedural roughness (micro-imperfection) ---------- */
+  function makeRoughTex(){
+    var c=document.createElement('canvas'); c.width=256; c.height=256; var g=c.getContext('2d');
+    var img=g.createImageData(256,256), d=img.data;
+    for(var i=0;i<256*256;i++){ var v=205 + ((Math.random()*Math.random())-0.4)*60; v=Math.max(170,Math.min(245,v|0));
+      d[i*4]=d[i*4+1]=d[i*4+2]=v; d[i*4+3]=255; }
+    g.putImageData(img,0,0);
+    var tex=new THREE.CanvasTexture(c); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(3,6); return tex;
+  }
+  var brass = new THREE.MeshStandardMaterial({
+    color:0xD8AC42, metalness:1.0, roughness:0.36, roughnessMap:makeRoughTex(), envMapIntensity:1.32
+  });
+
+  /* ---------- build ONE lathe profile from the 2D turned-profile globals ---------- */
+  var S = 0.10;   // world units per lamp-unit
+  function pushRibs(P){                       // ribbed section as real turned grooves
+    var y0=6.6,y1=11.2,r0=1.44,r1=1.00,cycles=7,n=84;
+    for(var i=0;i<=n;i++){ var ff=i/n, y=y0+(y1-y0)*ff, r=(r0+(r1-r0)*ff)+0.075*Math.cos(ff*6.2832*cycles - Math.PI); P.push([y,r]); }
+  }
+  function buildProfile(){
+    var P=[];
+    function arr(a,skip){ for(var i=skip?1:0;i<a.length;i++) P.push([a[i][0],a[i][1]]); }
+    arr(window.E_FINIAL,false);               // spire .. collar
+    P.push([-2.3,0.80]);                        // post down to a SHALLOW dish-floor centre
+    // shallow saucer dish (3D-specific: flatter than the 2D side-silhouette so it
+    // doesn't revolve into a deep funnel) — floor rises gently to a wide rim, then
+    // a concave underside curves down to a slim neck.
+    var bowl=[[-2.6,10.9],[-2.92,11.5],[-2.6,11.15],[-1.9,9.7],[-0.9,7.0],[0.1,4.8],[0.9,3.4],[1.7,2.7]];
+    for(var bi=0;bi<bowl.length;bi++) P.push(bowl[bi]);
+    arr(window.E_COLLAR,false);                // decorative ring under the dish
+    arr(window.E_KNOB1,true);
+    pushRibs(P);                               // ribbed taper (with grooves)
+    arr(window.E_BULB,false);
+    P.push([14.0,1.04]); P.push([15.25,1.04]); P.push([15.4,0.93]); P.push([15.55,1.04]); P.push([16.9,1.04]); // stem + ring groove
+    arr(window.E_KNOB2,false);
+    arr(window.E_DOME,false);                  // centre bell of the foot
+    P.push([26.0,8.0]); P.push([26.0,11.4]); P.push([26.0,11.6]); // wide flat saucer brim
+    P.push([27.0,11.6]);                                          // outer rim edge (thickness)
+    P.push([27.05,9.0]); P.push([27.05,4.0]); P.push([27.05,0.0]);// underside back to the axis
+    return P;
+  }
+  var prof = buildProfile();
+  var pts = prof.map(function(q){ return new THREE.Vector2(Math.max(q[1],0.0008)*S, -q[0]*S); });
+  var body = new THREE.Mesh(new THREE.LatheGeometry(pts, 160), brass);
+
+  var lamp = new THREE.Group(); lamp.add(body);
+
+  /* ---------- five beaks (spouts) + wick-tip markers, fanned across the front ---------- */
+  var markers=[], beakAz=[-1.15,-0.58,0,0.58,1.15];
+  var beakGeo=new THREE.ConeGeometry(0.42*S, 1.5*S, 18);
+  var rimR=10.2*S, rimY=2.55*S, tipR=11.2*S, tipY=3.5*S;
+  for(var b=0;b<beakAz.length;b++){
+    var gb=new THREE.Group(); gb.rotation.y=beakAz[b];
+    var cone=new THREE.Mesh(beakGeo, brass);
+    cone.position.set(0, (rimY+tipY)/2, (rimR+tipR)/2);
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(0, tipY-rimY, tipR-rimR).normalize());
+    gb.add(cone);
+    var mk=new THREE.Object3D(); mk.position.set(0, tipY, tipR); gb.add(mk);
+    lamp.add(gb); markers.push(mk);
+  }
+  scene.add(lamp);
+
+  /* ---------- lights: one crisp key from upper-left, a cool fill, low ambient ---------- */
+  var key=new THREE.DirectionalLight(0xfff1d6, 1.5); key.position.set(-5,7,4); scene.add(key);
+  var fill=new THREE.DirectionalLight(0xbcd0ff, 0.35); fill.position.set(6,2,5); scene.add(fill);
+  var rim=new THREE.DirectionalLight(0xffd9a0, 0.5); rim.position.set(2,-3,-5); scene.add(rim);  // warm back-rim
+  scene.add(new THREE.AmbientLight(0x3a3040, 0.45));
+
+  /* ---------- frame the camera straight-on and slightly above ---------- */
+  var box=new THREE.Box3().setFromObject(lamp);
+  var ctr=box.getCenter(new THREE.Vector3());
+  var size=box.getSize(new THREE.Vector3());
+  lamp.position.y -= ctr.y;                                   // recentre vertically about origin
+  var bowlY = 2.6*S - ctr.y;                                  // bowl-centre world height after recentre
+  var camDist = (size.y*0.5)/Math.tan((30*Math.PI/360)) * 1.14;
+  camera.position.set(0, size.y*0.10, camDist);
+  camera.lookAt(0, size.y*0.02, 0);
+
+  /* ---------- API exposed to the classic loop ---------- */
+  function toScreen(v){ v.project(camera); return {x:(v.x*0.5+0.5)*window.innerWidth, y:(-v.y*0.5+0.5)*window.innerHeight, z:v.z}; }
+
+  // dev/QA aid: ?spin=<radians> freezes the turntable at a fixed angle for screenshots
+  var DBGSPIN = /[?&]spin=([0-9.]+)/.test(location.search) ? parseFloat(RegExp.$1) : null;
+  var API = {
+    ok:true,
+    setSpin:function(a){ lamp.rotation.y = (DBGSPIN!=null) ? DBGSPIN : (a||0); },
+    setSize:function(w,h,dpr){
+      camera.aspect=w/h; camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(dpr||window.devicePixelRatio||1,1.75));
+      renderer.setSize(w,h,false);
+    },
+    render:function(){ try{ renderer.render(scene,camera); }catch(e){ API.ok=false; } },
+    project:function(){
+      try{
+        var bowlS=toScreen(new THREE.Vector3(0,bowlY,0));
+        var upS  =toScreen(new THREE.Vector3(0,bowlY+S,0));
+        var ppu=Math.hypot(upS.x-bowlS.x, upS.y-bowlS.y); if(!(ppu>1)) ppu=10;
+        var wicks=[];
+        for(var i=0;i<markers.length;i++){
+          var wp=markers[i].getWorldPosition(new THREE.Vector3());
+          var ss=toScreen(wp.clone());
+          var lean=Math.max(-0.6,Math.min(0.6,((ss.x-bowlS.x)/ppu)*0.06));
+          wicks.push({x:ss.x, y:ss.y, vis:(wp.z>-0.15*S && ss.z<1), lean:lean});
+        }
+        return {wicks:wicks, bowl:{x:bowlS.x,y:bowlS.y}, ppu:ppu};
+      }catch(e){ return null; }
+    }
+  };
+  canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); API.ok=false; }, false);
+  window.LAMP3D = API;
+})();
 </script>
 </body>
 </html>
