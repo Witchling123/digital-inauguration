@@ -223,6 +223,10 @@ body.to-video #video{opacity:1;pointer-events:auto;}
   100%{transform:scaleY(1.07) scaleX(.97) skewX(2deg);}
 }
 @keyframes cglow{0%,100%{opacity:.7;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
+/* after the inauguration is complete, hand control back to the normal mouse */
+body.native-cursor{cursor:default;}
+body.native-cursor #cursor{display:none;}
+body.native-cursor #clicktoplay{cursor:default;}
 </style>
 </head>
 <body>
@@ -330,9 +334,9 @@ function resize(){
 window.addEventListener('resize', resize);
 
 function lampMetrics(){
-  var p = Math.min(H*0.82/39, W*0.92/32);
+  var p = Math.min(H*0.84/45, W*0.92/32);
   var ax = W/2;
-  var ay = H*0.90 - 30*p;     // anchor = oil-bowl rim centre (local 0,0)
+  var ay = H*0.91 - 29.2*p;   // anchor = oil-bowl rim centre (local 0,0)
   return {p:p, ax:ax, ay:ay};
 }
 /* 5 wick positions across the oil-bowl rim (local grid-x) + wick-tip height.
@@ -475,16 +479,22 @@ function drawBrandMark(t){
 
 /* ===================  BRASS SAMAI LAMP  ===================
    Realistic turned-brass body (vector + metallic gradients, specular
-   highlights, engraved rings) with the cute pixel flames kept on top. */
-var FLAMEP=["..3..",".232.",".232.","12321","12221","11211",".111."];
+   highlights, engraved rings) with soft glowing teardrop flames on top. */
 
-/* turned elements: [unit-y, half-width] right edge, top -> bottom */
-var E_BOWL  = [[-2.4,10.6],[-1.6,11.6],[-0.8,11.0],[0.1,9.7],[1.1,7.5],[2.2,5.0],[3.0,3.0]];
-var E_COLLAR= [[3.0,3.0],[3.3,1.9],[3.7,2.6],[4.1,1.6],[4.3,1.3]];
-var E_KNOB1 = [[6.5,1.4],[7.1,2.2],[7.55,2.4],[8.0,2.2],[8.6,1.4]];
-var E_DISC  = [[11.5,1.3],[11.8,4.4],[12.2,4.7],[12.6,4.4],[13.1,1.3]];   /* decorative thattu disc */
-var E_BULB  = [[16.0,1.3],[16.7,2.8],[17.25,3.1],[17.8,2.8],[18.4,1.3]];
-var E_BASE  = [[21.0,1.8],[21.4,3.6],[22.0,4.7],[22.6,5.1],[23.0,4.4],[23.5,4.9],[24.3,7.4],[25.3,9.9],[26.3,12.0],[27.2,13.6],[27.9,14.7],[28.4,15.2],[28.8,15.3],[29.1,14.9],[29.4,13.6],[29.6,11.5]];
+/* turned elements: [unit-y, half-width] right edge, top -> bottom.
+   Modelled on a Kerala nilavilakku: vase+spire finial, ribbed pillar with
+   stacked bulbs, shallow petal bowl, wide flat domed foot. */
+var E_FINIAL= [[-15.6,0.0],[-15.0,0.30],[-14.2,0.55],[-13.3,0.82],[-12.4,1.04],
+               [-11.5,1.20],[-10.6,1.62],[-9.8,2.12],[-9.1,2.48],[-8.5,2.56],
+               [-7.9,2.34],[-7.3,1.80],[-6.8,1.20],[-6.4,0.92],
+               [-6.0,1.42],[-5.6,1.50],[-5.3,0.90]];   /* slender spire + onion bulb + bead + collar */
+var E_BOWL  = [[-2.4,11.0],[-1.6,11.8],[-0.9,11.2],[0.0,9.7],[1.0,7.4],[2.1,4.9],[3.0,2.9]];
+var E_COLLAR= [[3.0,2.9],[3.3,1.8],[3.7,2.5],[4.1,1.55],[4.4,1.35]];
+var E_KNOB1 = [[4.6,1.35],[5.0,1.95],[5.4,2.15],[5.8,1.95],[6.3,1.35]];
+var E_RIBS  = [[6.3,1.5],[6.9,1.42],[7.5,1.34],[8.1,1.26],[8.7,1.18],[9.3,1.1],[9.7,1.04]]; /* ribbed taper */
+var E_BULB  = [[9.7,1.2],[10.4,2.5],[11.0,2.8],[11.6,2.5],[12.2,1.2]];
+var E_KNOB2 = [[15.2,1.3],[15.9,2.7],[16.5,3.0],[17.1,2.7],[17.8,1.3]];   /* larger lower bulb */
+var E_BASE  = [[19.2,1.6],[20.0,2.8],[21.0,4.2],[22.2,6.2],[23.4,8.5],[24.6,10.6],[25.6,12.4],[26.4,13.8],[27.0,14.8],[27.4,15.3],[27.6,15.4],[27.9,14.6],[28.1,13.3],[28.4,12.7],[29.0,12.5],[29.2,11.4]];
 
 /* polished-brass cylinder gradient, lit from upper-left (rim-light on right) */
 function brassGrad(cx,hw,p){
@@ -585,14 +595,15 @@ function drawBeak(s,p){                 /* small spout + dark cotton wick on the
 /* draw the whole lamp (caller already translated to anchor / rotated); p = unit size */
 function drawLamp(p){
   drawTurned(E_BASE,p);
-  ringGroove(22.9,4.5,p); ringGroove(26.3,12.0,p);
-  drawColumn(18.4,21.1,1.2,p);
-  drawTurned(E_BULB,p);  sphereHi(17.25,3.0,p);
-  drawColumn(13.1,16.1,1.1,p); ringGroove(14.6,1.1,p);
-  drawTurned(E_DISC,p);
-  drawColumn(8.6,11.6,1.1,p);   ringGroove(10.1,1.1,p);
-  drawTurned(E_KNOB1,p); sphereHi(7.55,2.3,p);
-  drawColumn(4.3,6.6,1.2,p);
+  ringGroove(24.6,10.6,p); ringGroove(26.4,13.8,p);
+  drawColumn(17.8,19.3,1.25,p);
+  drawTurned(E_KNOB2,p); sphereHi(16.5,3.0,p);
+  drawColumn(12.2,15.3,1.12,p); ringGroove(13.7,1.12,p);
+  drawTurned(E_BULB,p);  sphereHi(11.0,2.8,p);
+  drawTurned(E_RIBS,p);                                   /* ribbed taper */
+  for(var rb=0;rb<6;rb++) ringGroove(6.8+rb*0.48, 1.46-rb*0.075, p);
+  drawTurned(E_KNOB1,p); sphereHi(5.4,2.15,p);
+  drawColumn(4.4,4.8,1.35,p);
   drawTurned(E_COLLAR,p);
   drawTurned(E_BOWL,p);
 
@@ -615,6 +626,10 @@ function drawLamp(p){
   ctx.strokeStyle=rh;
   ctx.beginPath();ctx.ellipse(0,-1.9*p,11.4*p,1.4*p,0,Math.PI,2*Math.PI);ctx.stroke();
 
+  // central finial (vase + tall spire) rising from the bowl centre, behind the flames
+  drawColumn(-5.3,-0.8,0.78,p);
+  drawTurned(E_FINIAL,p); sphereHi(-8.5,2.5,p);
+
   for(var w=0;w<SPOUTS.length;w++) drawBeak(SPOUTS[w],p);   // five wicks
 
   // warm lit-glow wash over the brass, grows with each flame (torchlight)
@@ -628,46 +643,74 @@ function drawLamp(p){
   }
 }
 
-/* chunky pixel flame rising from a wick (local unit coords), with a torch glow */
-function drawFlamePix(s,t,seed,p){
-  var fpx=p*0.5;                       // one flame-pixel
+/* smooth leaning teardrop outline: rounded base at (bx,by) -> point at tip */
+function flameOutline(bx,by,tipx,tipy,wmax){
+  var midy=by+(tipy-by)*0.40;
+  ctx.beginPath();
+  ctx.moveTo(bx-wmax*0.3,by);
+  ctx.quadraticCurveTo(bx-wmax, midy, tipx, tipy);       // left edge swells, draws to tip
+  ctx.quadraticCurveTo(bx+wmax, midy, bx+wmax*0.3,by);   // right edge back down
+  ctx.quadraticCurveTo(bx, by+wmax*0.45, bx-wmax*0.3,by);// rounded bottom
+  ctx.closePath();
+}
+/* realistic oil-lamp flame: layered emissive teardrops (amber body, golden
+   inner, white-hot core, blue wick base) with a soft halo, all flickering */
+function drawFlame(s,t,seed,p){
   var bx=s*p, by=FLAME_BASE*p;
-  var fl=Math.sin(t*8+seed), fl2=Math.sin(t*5.3+seed*1.7);
-  var sway=fl*0.6+Math.sin(t*11+seed*2.1)*0.3;
-  var tall=fl>0.45?1:(fl<-0.5?-1:0);
-  // soft glow
-  var gy=by-3*fpx;
+  var f1=Math.sin(t*7.7+seed), f2=Math.sin(t*4.3+seed*1.7), f3=Math.sin(t*15.1+seed*0.7);
+  var intensity=0.62+0.38*(0.6*f1+0.3*f2+0.1*f3);        // overall brightness 0.24..1
+  var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5; // tip lean (units)
+  var h=(5.0+0.8*intensity+0.25*f2)*p;                   // flame height
+  var wmax=(1.42+0.12*f3)*p;                             // half max width
+  var tipx=bx+sway*p, tipy=by-h;
+
+  ctx.save();
   ctx.globalCompositeOperation='lighter';
-  var gr=fpx*7.5*(0.9+0.12*fl2);
-  var gg=ctx.createRadialGradient(bx,gy,0,bx,gy,gr);
-  gg.addColorStop(0,'rgba(255,238,180,0.62)');gg.addColorStop(0.4,'rgba(255,150,50,0.32)');gg.addColorStop(1,'rgba(232,96,44,0)');
-  ctx.fillStyle=gg;ctx.beginPath();ctx.arc(bx,gy,gr,0,6.2832);ctx.fill();
-  ctx.globalCompositeOperation='source-over';
-  // pixel flame body
-  var rows=FLAMEP.length, bright=fl2>0;
-  for(var ri=0;ri<rows;ri++){
-    if(tall<0 && ri===0) continue;                       // shorter flicker frame
-    var line=FLAMEP[ri], up=(rows-1-ri)/(rows-1);
-    var ry=by-(rows-ri)*fpx, dx=Math.round(sway*up*2)*fpx;
-    for(var ci=0;ci<line.length;ci++){var ch=line.charAt(ci);if(ch==='.')continue;
-      var col=ch==='3'?(bright?'#fffefa':'#fff3c0'):(ch==='2'?'#ffd24a':'#ff8a1e');
-      ctx.fillStyle=col;
-      ctx.fillRect(Math.round(bx+(ci-2)*fpx+dx),Math.round(ry),Math.ceil(fpx),Math.ceil(fpx));}
-  }
-  if(tall>0){ ctx.fillStyle=bright?'#fffefa':'#fff3c0';
-    ctx.fillRect(Math.round(bx+Math.round(sway*2)*fpx),Math.round(by-(rows+1)*fpx),Math.ceil(fpx),Math.ceil(fpx)); }
-  // --- slight realism: hot inner core (depth) + cool blue base ---
-  ctx.globalCompositeOperation='lighter';
-  var coreH=rows*fpx*0.5, cgy=by-coreH*0.85;
-  var cc=ctx.createRadialGradient(bx,cgy,0,bx,cgy,coreH);
-  cc.addColorStop(0,'rgba(255,255,248,'+(0.42+0.12*fl2)+')');
-  cc.addColorStop(0.55,'rgba(255,214,120,0.16)');cc.addColorStop(1,'rgba(255,214,120,0)');
-  ctx.save();ctx.translate(bx,cgy);ctx.scale(0.62,1);
-  ctx.fillStyle=cc;ctx.beginPath();ctx.arc(0,0,coreH,0,6.2832);ctx.fill();ctx.restore();
-  var bb=ctx.createRadialGradient(bx,by-fpx*0.4,0,bx,by-fpx*0.4,fpx*2.1);   // blue base
-  bb.addColorStop(0,'rgba(120,170,255,0.5)');bb.addColorStop(1,'rgba(120,170,255,0)');
-  ctx.fillStyle=bb;ctx.beginPath();ctx.arc(bx,by-fpx*0.4,fpx*2.1,0,6.2832);ctx.fill();
-  ctx.globalCompositeOperation='source-over';
+
+  // 1. soft outer halo / torch glow
+  var hr=h*1.15, hy=by-h*0.42;
+  var hg=ctx.createRadialGradient(bx,hy,0,bx,hy,hr);
+  hg.addColorStop(0,'rgba(255,170,70,'+(0.30*intensity)+')');
+  hg.addColorStop(0.5,'rgba(255,120,40,'+(0.14*intensity)+')');
+  hg.addColorStop(1,'rgba(230,80,30,0)');
+  ctx.fillStyle=hg;ctx.beginPath();ctx.arc(bx,hy,hr,0,6.2832);ctx.fill();
+
+  // 2. outer flame body — deep amber fading to the point
+  flameOutline(bx,by,tipx,tipy,wmax);
+  var og=ctx.createLinearGradient(0,by,0,tipy);
+  og.addColorStop(0.00,'rgba(255,120,24,0.50)');
+  og.addColorStop(0.45,'rgba(255,140,32,0.60)');
+  og.addColorStop(0.80,'rgba(255,96,24,0.28)');
+  og.addColorStop(1.00,'rgba(220,60,20,0)');
+  ctx.fillStyle=og;ctx.fill();
+
+  // 3. inner flame — golden yellow
+  var iw=wmax*0.58, ih=h*0.74, itipy=by-ih, itipx=bx+sway*p*0.7;
+  flameOutline(bx,by,itipx,itipy,iw);
+  var ig=ctx.createLinearGradient(0,by,0,itipy);
+  ig.addColorStop(0.00,'rgba(255,205,86,0.60)');
+  ig.addColorStop(0.50,'rgba(255,234,150,0.85)');
+  ig.addColorStop(1.00,'rgba(255,205,90,0)');
+  ctx.fillStyle=ig;ctx.fill();
+
+  // 4. white-hot core low in the flame
+  var cw=wmax*0.34, ch=h*0.42, ctipy=by-ch;
+  flameOutline(bx,by,bx+sway*p*0.4,ctipy,cw);
+  var cg=ctx.createLinearGradient(0,by,0,ctipy);
+  cg.addColorStop(0.00,'rgba(255,250,236,'+(0.72*intensity)+')');
+  cg.addColorStop(0.55,'rgba(255,247,224,'+(0.88*intensity)+')');
+  cg.addColorStop(1.00,'rgba(255,238,196,0)');
+  ctx.fillStyle=cg;ctx.fill();
+
+  // 5. cool blue/translucent base hugging the wick
+  var br=wmax*1.05, bcy=by-0.15*p;
+  var bg=ctx.createRadialGradient(bx,bcy,0,bx,bcy,br);
+  bg.addColorStop(0.00,'rgba(120,160,255,'+(0.40*intensity)+')');
+  bg.addColorStop(0.65,'rgba(90,120,230,0.12)');
+  bg.addColorStop(1.00,'rgba(90,120,230,0)');
+  ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx,bcy,br,0,6.2832);ctx.fill();
+
+  ctx.restore();
 }
 
 function drawLampGlow(m,extra){
@@ -745,13 +788,13 @@ function frame(){
     ctx.save();ctx.translate(m.ax,m.ay);
     if(STATE==='spin'){
       var stt=Math.min(1,(tNow-spinStart)/CONFIG.SPIN_DURATION), e=easeInOutCubic(stt);
-      var ang=e*CONFIG.TURNS*6.2832, sc=1+0.10*Math.sin(stt*Math.PI), pivY=14*p;
+      var ang=e*CONFIG.TURNS*6.2832, sc=1+0.10*Math.sin(stt*Math.PI), pivY=12*p;
       ctx.translate(0,pivY);ctx.rotate(ang);ctx.scale(sc,sc);ctx.translate(0,-pivY);
     }
     drawLamp(p);
     var showAll=(STATE==='spin'||STATE==='hold'||STATE==='end');
     var n=showAll?CONFIG.WICK_COUNT:litCount;
-    for(var k=0;k<n;k++) drawFlamePix(SPOUTS[k],t,k*2.1+0.5,p);
+    for(var k=0;k<n;k++) drawFlame(SPOUTS[k],t,k*2.1+0.5,p);
     ctx.restore();
   }
 
@@ -863,6 +906,7 @@ function start(){
   if(STATE!=='gate')return;
   requestFS();unlockAudio();primeVideo();
   STATE='lighting';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  document.body.classList.remove('native-cursor');   // matchstick cursor for the lighting
   gateEl.classList.add('hide');setTimeout(function(){gateEl.style.display='none';},850);
   revealEl.classList.remove('show');promptEl.classList.add('show');
 }
@@ -876,6 +920,7 @@ function beginSpin(){if(STATE!=='lighting')return;STATE='spin';spinStart=now();p
 function enterVideo(){
   if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
   document.body.classList.add('to-video');   // commit to the crossfade
+  document.body.classList.add('native-cursor');   // inauguration done -> normal mouse back
   if(USE_LOCAL){ playLocal(); return; }
   // YouTube: truly no player available (e.g. offline) -> stay on the lit-lamp scene, cleanly
   if(ytFailed && !player){ enterEnd(); return; }
@@ -903,10 +948,11 @@ function attemptPlay(tries){
 function showClickToPlay(){ctpEl.classList.add('show');}
 function hideClickToPlay(){ctpEl.classList.remove('show');}
 function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
-  document.body.classList.remove('to-video');hideClickToPlay();
+  document.body.classList.remove('to-video');document.body.classList.add('native-cursor');hideClickToPlay();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  document.body.classList.remove('native-cursor');   // matchstick back for the rerun
   clearTimeout(autoplayTimer);document.body.classList.remove('to-video');hideClickToPlay();
   revealEl.classList.remove('show');promptEl.classList.remove('show');
   gateEl.style.display='flex';void gateEl.offsetWidth;gateEl.classList.remove('hide');
