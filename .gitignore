@@ -1,5 +1,7 @@
 # Internal / confidential / large brand assets — DO NOT publish
 *.pdf
+# Large local event video — lives next to index.html, not in the repo
+*.mp4
 
 # Local tooling & agent files
 .claude/

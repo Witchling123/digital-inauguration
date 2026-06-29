@@ -104,12 +104,12 @@ canvas#fx{
   margin-bottom:3.4vh;
 }
 #reveal .logos .logo{
-  height:5.6vh;width:auto;opacity:.94;
+  height:7.4vh;width:auto;opacity:.94;
   filter:drop-shadow(0 0 14px rgba(244,201,90,.22));
 }
-#reveal .logos .logo.ashoka{ height:6.8vh; }   /* Ashoka reads slightly larger */
+#reveal .logos .logo.ashoka{ height:8.8vh; }   /* Ashoka reads slightly larger */
 #reveal .logos .sep{
-  width:1px;height:5vh;background:linear-gradient(rgba(243,233,239,0),rgba(243,233,239,.32),rgba(243,233,239,0));
+  width:1px;height:6.6vh;background:linear-gradient(rgba(243,233,239,0),rgba(243,233,239,.32),rgba(243,233,239,0));
 }
 #reveal .eyebrow{
   font-family:"Manrope";font-weight:700;
@@ -321,7 +321,7 @@ var CONFIG = {
      A local file plays offline, needs no network, and avoids YouTube's file://
      embed error (153). Leave "" to use the YouTube fallback below.            */
   LOCAL_VIDEO_SRC : "",
-  YOUTUBE_ID      : "0JLcRsz7H0Q",                      // https://youtu.be/0JLcRsz7H0Q
+  YOUTUBE_ID      : "r0zN3H5MmnU",                      // https://youtu.be/r0zN3H5MmnU
   /* NOTE: YouTube embeds are BLOCKED when opening this file directly (file://) —
      that causes "error 153". To use YouTube you MUST serve over http, e.g. run
      `python -m http.server` in this folder and open http://localhost:8000 .     */
@@ -1055,12 +1055,26 @@ window.onYouTubeIframeAPIReady=function(){
       host:'https://www.youtube-nocookie.com',   // privacy host; fewer embed blocks
       playerVars:{enablejsapi:1,controls:1,rel:0,modestbranding:1,playsinline:1,fs:0,iv_load_policy:3},
       events:{onReady:function(){ytReady=true;
-        try{var f=player.getIframe(); if(f) f.referrerPolicy='strict-origin-when-cross-origin';}catch(e){}},
+        try{var f=player.getIframe(); if(f) f.referrerPolicy='strict-origin-when-cross-origin';}catch(e){}
+        forceMaxQuality();},
         onStateChange:onYTState,
         onError:function(){ytFailed=true;if(STATE==='video')enterEnd();}}});
   }catch(e){ytFailed=true;}
 };
-function onYTState(ev){if(ev.data===YT.PlayerState.ENDED)enterEnd();if(ev.data===YT.PlayerState.PLAYING)hideClickToPlay();}
+/* Best-effort request for the highest available resolution. YouTube deprecated
+   direct quality control (it mostly picks by player size + bandwidth, and the
+   full-screen player already biases toward HD), but these calls still nudge
+   older/embedded paths toward the top level when one is offered. */
+function forceMaxQuality(){
+  if(!player)return;
+  try{
+    var levels=player.getAvailableQualityLevels&&player.getAvailableQualityLevels();
+    var best=(levels&&levels.length)?levels[0]:'highres';   // levels are ordered best-first
+    if(player.setPlaybackQuality)player.setPlaybackQuality(best);
+    if(player.setPlaybackQualityRange)player.setPlaybackQualityRange(best,best);
+  }catch(e){}
+}
+function onYTState(ev){if(ev.data===YT.PlayerState.ENDED)enterEnd();if(ev.data===YT.PlayerState.PLAYING){hideClickToPlay();forceMaxQuality();}}
 /* prime playback during the gate gesture so later autoplay-with-sound is allowed */
 function primeVideo(){
   if(USE_LOCAL){ try{ var pr=localVid.play(); if(pr&&pr.then)pr.then(function(){localVid.pause();localVid.currentTime=0;}).catch(function(){}); }catch(e){} return; }
