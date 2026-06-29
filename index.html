@@ -99,6 +99,17 @@ canvas#fx{
   text-align:center;opacity:0;transition:opacity 1s ease, filter 1s ease;
   filter:blur(8px);pointer-events:none;padding:0 6vw;
 }
+#reveal .logos{
+  display:flex;align-items:center;justify-content:center;gap:3.4vh;
+  margin-bottom:3.4vh;
+}
+#reveal .logos .logo{
+  height:5.6vh;width:auto;opacity:.94;
+  filter:drop-shadow(0 0 14px rgba(244,201,90,.22));
+}
+#reveal .logos .sep{
+  width:1px;height:5vh;background:linear-gradient(rgba(243,233,239,0),rgba(243,233,239,.32),rgba(243,233,239,0));
+}
 #reveal .eyebrow{
   font-family:"Manrope";font-weight:700;
   font-size:1.8vh;letter-spacing:.5em;color:var(--orange);
@@ -258,6 +269,11 @@ body.native-cursor #clicktoplay{cursor:default;}
   <div id="ui">
     <div id="prompt">Light the lamp</div>
     <div id="reveal">
+      <div class="logos">
+        <img class="logo" src="assets/csbc-logo.png" alt="Centre for Social and Behaviour Change" />
+        <span class="sep"></span>
+        <img class="logo" src="assets/ashoka-logo.png" alt="Ashoka University" />
+      </div>
       <div class="eyebrow">Now Inaugurated</div>
       <div class="title" id="revealTitle">Initiative</div>
     </div>
@@ -1157,6 +1173,8 @@ document.addEventListener('pointermove',function(e){cx2=e.clientX;cy2=e.clientY;
 buildDots();updateDots();resize();requestAnimationFrame(frame);
 /* dev/screenshot helper: open with ?shot to jump straight to the lit lamp */
 if(/[?&]shot/.test(location.search)){ STATE='end'; litCount=CONFIG.WICK_COUNT; updateDots(); gateEl.classList.add('hide'); gateEl.style.display='none'; }
+/* dev/QA: ?card shows the final title + logos card (lamp/scene faded) */
+if(/[?&]card/.test(location.search)){ STATE='end'; litCount=CONFIG.WICK_COUNT; updateDots(); gateEl.classList.add('hide'); gateEl.style.display='none'; document.body.classList.add('dim-lamp'); revealEl.classList.add('show'); }
 </script>
 
 <!-- =======================================================================
