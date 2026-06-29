@@ -107,6 +107,7 @@ canvas#fx{
   height:5.6vh;width:auto;opacity:.94;
   filter:drop-shadow(0 0 14px rgba(244,201,90,.22));
 }
+#reveal .logos .logo.ashoka{ height:6.8vh; }   /* Ashoka reads slightly larger */
 #reveal .logos .sep{
   width:1px;height:5vh;background:linear-gradient(rgba(243,233,239,0),rgba(243,233,239,.32),rgba(243,233,239,0));
 }
@@ -272,7 +273,7 @@ body.native-cursor #clicktoplay{cursor:default;}
       <div class="logos">
         <img class="logo" src="assets/csbc-logo.png" alt="Centre for Social and Behaviour Change" />
         <span class="sep"></span>
-        <img class="logo" src="assets/ashoka-logo.png" alt="Ashoka University" />
+        <img class="logo ashoka" src="assets/ashoka-logo.png" alt="Ashoka University" />
       </div>
       <div class="eyebrow">Now Inaugurated</div>
       <div class="title" id="revealTitle">Initiative</div>
@@ -324,11 +325,10 @@ var CONFIG = {
   /* NOTE: YouTube embeds are BLOCKED when opening this file directly (file://) —
      that causes "error 153". To use YouTube you MUST serve over http, e.g. run
      `python -m http.server` in this folder and open http://localhost:8000 .     */
-  WICK_COUNT      : 6,
+  WICK_COUNT      : 5,
   SPIN_DURATION   : 2600,   // ms — ceremonial turntable spin of the 3D lamp
   HOLD_DURATION   : 3000,   // ms — beat on the "all lit" + title before the video
-  TURNS           : 3,      // full Y-axis turns (integer => the six beaks end facing front)
-  CLICKS_TO_PLAY  : 2       // deliberate clicks on the video overlay before playback starts (set 3 if preferred)
+  TURNS           : 3       // full Y-axis turns (integer => the beaks end facing front)
 };
 /* Do NOT hardcode stakeholder names. Five wicks, five dots, no names on screen. */
 
@@ -350,7 +350,7 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 /* =======================================================================
    ============================  STATE  ==================================
    ======================================================================= */
-var STATE = 'gate';           // gate | lighting | spin | hold | video | end
+var STATE = 'gate';           // gate | lighting | spin | hold | ready | video | end
 var litCount = 0, muted = false;
 var spinStart = 0, holdStart = 0;
 
@@ -394,7 +394,7 @@ function lampMetrics(){
 /* 5 wick positions across the oil-bowl rim (local grid-x) + wick-tip height.
    A traditional standing samai / kuthuvilakku: tiered base, knobbed stem,
    shallow oil well with five clean wicks. (Turned profiles E_* below.) */
-var SPOUTS = [-10.5,-6.3,-2.1,2.1,6.3,10.5];   /* six wicks fanned across the 2D-fallback dish rim */
+var SPOUTS = [-10,-5,0,5,10];   /* five wicks fanned across the 2D-fallback dish rim */
 var WICK2D_Y = -3.25;   /* 2D-fallback wick-tip height (short lip just above the rim; flames anchor here) */
 
 /* ---------- ambient: stars + embers ---------- */
@@ -891,7 +891,7 @@ function frame(){
   if(STATE==='spin'){ if(tNow-spinStart>=CONFIG.SPIN_DURATION){STATE='hold';holdStart=tNow;
     document.body.classList.add('dim-lamp');   // spin done -> fade the lamp/scene out, leaving the title
   } }
-  else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){enterVideo();} }
+  else if(STATE==='hold'){ if(tNow-holdStart>=CONFIG.HOLD_DURATION){STATE='ready';} }   // rest on the title card; click starts the video
 
   // spin angle (ease-accelerate then smooth stop), flame fade-to-bloom, bloom amount
   var spinProg=0, spinAngle=0, flameAlpha=1, bloom=0;
@@ -1101,22 +1101,19 @@ function beginFinale(){
   STATE='spin';spinStart=now();playChord();spawnFlourish();spawnConfetti();
   setTimeout(function(){ if(STATE==='spin'||STATE==='hold') revealEl.classList.add('show'); }, 850);
 }
-/* MANUAL PLAY ONLY: after the finale the player sits paused (primed during the gate
-   so sound is allowed later). The audience must click CLICKS_TO_PLAY times to start it. */
-var playClicks=0;
+/* After the finale the screen rests on the title + logos card (STATE 'ready'); the
+   video NEVER autoplays. A single click (the presenter's) fades the video in and
+   plays it — the click itself is the user gesture that allows sound. No overlay. */
 function enterVideo(){
   if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
-  playClicks=0;
-  document.body.classList.add('to-video');   // commit to the crossfade
+  document.body.classList.add('to-video');   // crossfade the video in
   document.body.classList.add('native-cursor');   // inauguration done -> normal mouse back
-  if(USE_LOCAL){ try{ localVid.pause(); localVid.currentTime=0; }catch(e){} showClickToPlay(); return; }
-  // YouTube: truly no player available (e.g. offline) -> stay on the lit-lamp scene, cleanly
-  if(ytFailed && !player){ enterEnd(); return; }
-  showClickToPlay();   // player is primed & paused; wait for deliberate clicks (never autoplays)
+  if(ytFailed && !player && !USE_LOCAL){ enterEnd(); return; }   // offline / no player -> graceful end
+  startPlayback();
 }
-function startPlayback(){   // called only after CLICKS_TO_PLAY deliberate clicks
+function startPlayback(){
   try{
-    if(USE_LOCAL){ localVid.muted=false; localVid.play(); }
+    if(USE_LOCAL){ localVid.muted=false; localVid.currentTime=0; localVid.play(); }
     else if(player){ if(player.unMute)player.unMute(); if(player.setVolume)player.setVolume(100); player.seekTo(0,true); player.playVideo(); }
   }catch(e){}
 }
@@ -1128,7 +1125,6 @@ function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
-  playClicks=0;   // reset the click-to-play counter
   if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);   // unwind the turntable
   document.body.classList.remove('native-cursor');   // matchstick back for the rerun
   clearTimeout(autoplayTimer);document.body.classList.remove('to-video');document.body.classList.remove('dim-lamp');hideClickToPlay();
@@ -1143,18 +1139,12 @@ function jumpToVideo(){if(STATE==='video')return;litCount=CONFIG.WICK_COUNT;upda
 document.addEventListener('click',function(){
   if(STATE==='gate'){start();return;}
   if(STATE==='lighting'){lightNext();return;}
-});
-/* count deliberate clicks anywhere on the full-screen overlay (Air-Mouse friendly);
-   only start playback once the threshold is reached. Overlay stays up until PLAYING. */
-ctpEl.addEventListener('click',function(e){ e.stopPropagation();
-  if(STATE!=='video') return;
-  playClicks++;
-  if(playClicks>=CONFIG.CLICKS_TO_PLAY){ startPlayback(); }   // overlay hides on the PLAYING event
+  if(STATE==='ready'){enterVideo();return;}   // click the title card -> video fades in and plays
 });
 document.addEventListener('keydown',function(e){
   var k=e.key;
   if(k===' '||k==='Spacebar'||k==='Enter'){e.preventDefault();
-    if(STATE==='gate')start();else if(STATE==='lighting')lightNext();return;}
+    if(STATE==='gate')start();else if(STATE==='lighting')lightNext();else if(STATE==='ready')enterVideo();return;}
   if(k==='r'||k==='R'){resetAll();return;}
   if(k==='v'||k==='V'){jumpToVideo();return;}
   if(k==='m'||k==='M'){muted=!muted;
@@ -1284,9 +1274,9 @@ import * as THREE from 'three';
 
   var lamp = new THREE.Group(); lamp.add(body);
 
-  /* ---------- six beaks: short broad brass LIPS growing out of the rim (every ~30deg
+  /* ---------- five beaks: short broad brass LIPS growing out of the rim (fanned
      across the front arc, all facing the camera) + a dark wick nub at each tip ---------- */
-  var markers=[], beakAz=[-1.309,-0.785,-0.262,0.262,0.785,1.309];   // -75..+75 deg, 30deg apart
+  var markers=[], beakAz=[-1.15,-0.575,0,0.575,1.15];   // five beaks fanned across the front (~33deg apart)
   // truncated cone: WIDE base (sits in the bowl wall) -> small rounded lip at the tip
   var beakGeo=new THREE.CylinderGeometry(0.16*S, 0.80*S, 1.5*S, 20);
   var wickGeo=new THREE.SphereGeometry(0.14*S, 10, 8);
