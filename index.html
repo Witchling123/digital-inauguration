@@ -327,7 +327,8 @@ var CONFIG = {
   WICK_COUNT      : 6,
   SPIN_DURATION   : 2600,   // ms — ceremonial turntable spin of the 3D lamp
   HOLD_DURATION   : 3000,   // ms — beat on the "all lit" + title before the video
-  TURNS           : 3       // full Y-axis turns (integer => the five beaks end facing front)
+  TURNS           : 3,      // full Y-axis turns (integer => the six beaks end facing front)
+  CLICKS_TO_PLAY  : 2       // deliberate clicks on the video overlay before playback starts (set 3 if preferred)
 };
 /* Do NOT hardcode stakeholder names. Five wicks, five dots, no names on screen. */
 
@@ -394,7 +395,7 @@ function lampMetrics(){
    A traditional standing samai / kuthuvilakku: tiered base, knobbed stem,
    shallow oil well with five clean wicks. (Turned profiles E_* below.) */
 var SPOUTS = [-10.5,-6.3,-2.1,2.1,6.3,10.5];   /* six wicks fanned across the 2D-fallback dish rim */
-var FLAME_BASE = -4.2;
+var WICK2D_Y = -3.25;   /* 2D-fallback wick-tip height (short lip just above the rim; flames anchor here) */
 
 /* ---------- ambient: stars + embers ---------- */
 var stars=[], embers=[];
@@ -412,7 +413,7 @@ var particles=[], rings=[];
 function spawnBurst(idx){
   var w=WICKS[idx], p=PPU;
   var sx, sy;
-  if(w){ sx=w.x; sy=w.y; } else { var m=lampMetrics(); p=m.p; sx=m.ax+SPOUTS[idx]*m.p; sy=m.ay+FLAME_BASE*m.p; }
+  if(w){ sx=w.x; sy=w.y; } else { var m=lampMetrics(); p=m.p; sx=m.ax+SPOUTS[idx]*m.p; sy=m.ay+WICK2D_Y*m.p; }
   var cols=['#fff7cf','#ffd24a','#ff8a1e','#e8602c','#AC2251','#F3E9EF'];
   for(var i=0;i<28;i++){
     var ang=rnd(-Math.PI,0), spd=rnd(40,185);
@@ -652,27 +653,27 @@ function ringGroove(y,hw,p){           /* engraved lathe ring: dark cut + bright
   ctx.strokeStyle='rgba(255,242,205,0.28)';
   ctx.beginPath();ctx.moveTo(-hw*p,(y+0.15)*p);ctx.lineTo(hw*p,(y+0.15)*p);ctx.stroke();
 }
-function drawBeak(s,p){                 /* elegant pointed spout + cotton wick on the rim */
-  var dir=s<0?-1:(s>0?1:0), lean=dir*0.6;    // outer spouts lean outward
-  // brass spout: rounded base at the rim narrowing to a fine lip that holds the wick
+function drawBeak(s,p){     /* short, broad brass lip growing out of the rim (not a floating spike) */
+  var dir=s<0?-1:(s>0?1:0), wx=s+dir*1.0, wy=WICK2D_Y;   // wick tip leans outward, just above the rim
+  // wide base that overlaps the bowl wall -> small rounded lip at (wx,wy)
   ctx.beginPath();
-  ctx.moveTo((s-1.5)*p,-1.9*p);
-  ctx.quadraticCurveTo((s-0.2)*p,-2.8*p,(s+lean-0.55)*p,-4.6*p);  // left edge up to lip
-  ctx.quadraticCurveTo((s+lean)*p,-5.05*p,(s+lean+0.55)*p,-4.6*p);// rounded lip
-  ctx.quadraticCurveTo((s+0.2)*p,-2.8*p,(s+1.5)*p,-1.9*p);        // right edge down
-  ctx.quadraticCurveTo(s*p,-2.4*p,(s-1.5)*p,-1.9*p);              // base curve
+  ctx.moveTo((s-1.9)*p,-1.7*p);                              // wide base on the rim (inner side)
+  ctx.quadraticCurveTo((s-0.3)*p,-2.6*p,(wx-0.5)*p, wy*p);   // left edge sweeps up to the lip
+  ctx.quadraticCurveTo(wx*p,(wy-0.42)*p,(wx+0.5)*p, wy*p);   // rounded lip tip
+  ctx.quadraticCurveTo((s+0.5)*p,-2.6*p,(s+1.9)*p,-1.7*p);   // right edge back down to base
+  ctx.quadraticCurveTo(s*p,-1.45*p,(s-1.9)*p,-1.7*p);        // base curve sits on / overlaps the rim
   ctx.closePath();
-  ctx.fillStyle=brassGrad(s+lean*0.4,1.7,p);ctx.fill();
-  ctx.lineWidth=Math.max(1,p*0.05);ctx.strokeStyle='rgba(36,20,5,0.42)';ctx.stroke();
+  ctx.fillStyle=brassGrad(s+dir*0.5,1.9,p);ctx.fill();
+  ctx.lineWidth=Math.max(1,p*0.05);ctx.strokeStyle='rgba(36,20,5,0.4)';ctx.stroke();
   // bright lip highlight
   ctx.globalCompositeOperation='lighter';
-  var lg=ctx.createLinearGradient((s+lean-0.5)*p,-4.7*p,(s+lean+0.5)*p,-4.4*p);
+  var lg=ctx.createLinearGradient((wx-0.5)*p,wy*p,(wx+0.5)*p,wy*p);
   lg.addColorStop(0,'rgba(255,248,220,0)');lg.addColorStop(0.5,'rgba(255,250,232,0.5)');lg.addColorStop(1,'rgba(255,248,220,0)');
-  ctx.fillStyle=lg;ctx.fillRect((s+lean-0.6)*p,-4.9*p,1.2*p,0.7*p);
+  ctx.fillStyle=lg;ctx.fillRect((wx-0.6)*p,(wy-0.15)*p,1.2*p,0.5*p);
   ctx.globalCompositeOperation='source-over';
-  // dark cotton wick nub
+  // dark cotton wick nub at the very tip (the flame anchors here)
   ctx.fillStyle='#2a1607';
-  ctx.beginPath();ctx.ellipse((s+lean)*p,-4.7*p,0.26*p,0.5*p,0,0,6.2832);ctx.fill();
+  ctx.beginPath();ctx.ellipse(wx*p,wy*p,0.22*p,0.4*p,0,0,6.2832);ctx.fill();
 }
 
 /* wide flat brass saucer foot with a small bell at its centre (the defining
@@ -792,7 +793,7 @@ function flameOutline(bx,by,tipx,tipy,wmax){
    bridge: in 3D the point is the projected wick tip, in 2D the SPOUT position.
    p = pixels per lamp-unit, lean = horizontal splay (units), fa = fade alpha. */
 function drawFlameAt(x,y,p,t,seed,lean,fa){
-  var bx=x, by=y;
+  var bx=x, by=y+3;   // nudge the rounded base down a few px so the fire overlaps the brass wick
   var f1=Math.sin(t*7.7+seed), f2=Math.sin(t*4.3+seed*1.7), f3=Math.sin(t*15.1+seed*0.7);
   var intensity=0.62+0.38*(0.6*f1+0.3*f2+0.1*f3);        // overall brightness 0.24..1
   var sway=(0.55*Math.sin(t*3.1+seed)+0.45*Math.sin(t*6.3+seed*2.1))*0.5 + (lean||0);
@@ -930,10 +931,12 @@ function frame(){
   ctx.globalCompositeOperation='source-over';
 
   var m=lampMetrics(), p=m.p;
-  // sensible defaults for the overlay anchor (used by 2D fallback + before 3D is ready)
-  LAMPCX=m.ax; LAMPCY=m.ay-1*p; PPU=p;
+  // sensible defaults for the overlay anchor (used by 2D fallback + before 3D is ready):
+  // wick tips sit on the short beak lips just above the rim, leaning outward.
+  LAMPCX=m.ax; LAMPCY=m.ay+WICK2D_Y*p; PPU=p;
   WICKS.length=0;
-  for(var s=0;s<SPOUTS.length;s++) WICKS.push({x:m.ax+SPOUTS[s]*p, y:m.ay+FLAME_BASE*p, vis:true, lean:SPOUTS[s]*0.05});
+  for(var s=0;s<SPOUTS.length;s++){ var sp=SPOUTS[s], d=sp<0?-1:1;
+    WICKS.push({x:m.ax+(sp+d*1.0)*p, y:m.ay+WICK2D_Y*p, vis:true, lean:sp*0.05}); }
 
   var showLamp = (STATE!=='gate' && STATE!=='video');
   if(showLamp){
@@ -957,7 +960,7 @@ function frame(){
       drawLamp(p);
       ctx.restore();
     }
-    drawLampGlow(LAMPCX,LAMPCY,p,bloom);
+    drawLampGlow(LAMPCX,LAMPCY,PPU,bloom);
   }
 
   /* ===================== FRONT CANVAS: flames + fx ===================== */
@@ -1027,6 +1030,7 @@ if(USE_LOCAL){
   localVid.src=CONFIG.LOCAL_VIDEO_SRC.trim();
   localVid.preload='auto'; localVid.load();
   localVid.addEventListener('ended', enterEnd);
+  localVid.addEventListener('playing', hideClickToPlay);   // hide the overlay once playback actually begins
   localVid.addEventListener('error', function(){ if(STATE==='video') enterEnd(); });
 }else{
   /* ---- YouTube fallback (requires serving over http, see CONFIG note) ---- */
@@ -1097,33 +1101,24 @@ function beginFinale(){
   STATE='spin';spinStart=now();playChord();spawnFlourish();spawnConfetti();
   setTimeout(function(){ if(STATE==='spin'||STATE==='hold') revealEl.classList.add('show'); }, 850);
 }
+/* MANUAL PLAY ONLY: after the finale the player sits paused (primed during the gate
+   so sound is allowed later). The audience must click CLICKS_TO_PLAY times to start it. */
+var playClicks=0;
 function enterVideo(){
   if(STATE==='video')return;STATE='video';litCount=CONFIG.WICK_COUNT;updateDots();
+  playClicks=0;
   document.body.classList.add('to-video');   // commit to the crossfade
   document.body.classList.add('native-cursor');   // inauguration done -> normal mouse back
-  if(USE_LOCAL){ playLocal(); return; }
+  if(USE_LOCAL){ try{ localVid.pause(); localVid.currentTime=0; }catch(e){} showClickToPlay(); return; }
   // YouTube: truly no player available (e.g. offline) -> stay on the lit-lamp scene, cleanly
   if(ytFailed && !player){ enterEnd(); return; }
-  attemptPlay(0);
+  showClickToPlay();   // player is primed & paused; wait for deliberate clicks (never autoplays)
 }
-function playLocal(){
-  try{ localVid.currentTime=0; localVid.muted=false; }catch(e){}
-  var pr; try{ pr=localVid.play(); }catch(e){ showClickToPlay(); return; }
-  if(pr && pr.then) pr.then(hideClickToPlay).catch(function(){ showClickToPlay(); });
-}
-function attemptPlay(tries){
-  if(STATE!=='video')return;
-  if(player && ytReady){
-    try{ player.seekTo(0,true); if(player.unMute)player.unMute(); if(player.setVolume)player.setVolume(100); player.playVideo(); }catch(e){}
-    clearTimeout(autoplayTimer);
-    autoplayTimer=setTimeout(function(){      // if autoplay-with-sound was blocked, offer manual start
-      var s=-99; try{s=player.getPlayerState();}catch(e){}
-      if(s!==1 && s!==3) showClickToPlay();
-    },1700);
-    return;
-  }
-  if(tries>50){ player?showClickToPlay():enterEnd(); return; }  // ~10s waited for the API
-  setTimeout(function(){attemptPlay(tries+1);},200);
+function startPlayback(){   // called only after CLICKS_TO_PLAY deliberate clicks
+  try{
+    if(USE_LOCAL){ localVid.muted=false; localVid.play(); }
+    else if(player){ if(player.unMute)player.unMute(); if(player.setVolume)player.setVolume(100); player.seekTo(0,true); player.playVideo(); }
+  }catch(e){}
 }
 function showClickToPlay(){ctpEl.classList.add('show');}
 function hideClickToPlay(){ctpEl.classList.remove('show');}
@@ -1133,6 +1128,7 @@ function enterEnd(){STATE='end';litCount=CONFIG.WICK_COUNT;updateDots();
   try{ if(USE_LOCAL){localVid.pause();} else if(player){player.stopVideo();} }catch(e){}
   revealEl.classList.add('show');promptEl.classList.remove('show');}
 function resetAll(){STATE='gate';litCount=0;updateDots();particles.length=0;rings.length=0;confetti.length=0;
+  playClicks=0;   // reset the click-to-play counter
   if(window.LAMP3D && window.LAMP3D.setSpin) window.LAMP3D.setSpin(0);   // unwind the turntable
   document.body.classList.remove('native-cursor');   // matchstick back for the rerun
   clearTimeout(autoplayTimer);document.body.classList.remove('to-video');document.body.classList.remove('dim-lamp');hideClickToPlay();
@@ -1148,8 +1144,13 @@ document.addEventListener('click',function(){
   if(STATE==='gate'){start();return;}
   if(STATE==='lighting'){lightNext();return;}
 });
-ctpEl.addEventListener('click',function(e){e.stopPropagation();hideClickToPlay();
-  try{ if(USE_LOCAL){localVid.muted=false;localVid.play();} else {player.unMute&&player.unMute();player.playVideo();} }catch(err){}});
+/* count deliberate clicks anywhere on the full-screen overlay (Air-Mouse friendly);
+   only start playback once the threshold is reached. Overlay stays up until PLAYING. */
+ctpEl.addEventListener('click',function(e){ e.stopPropagation();
+  if(STATE!=='video') return;
+  playClicks++;
+  if(playClicks>=CONFIG.CLICKS_TO_PLAY){ startPlayback(); }   // overlay hides on the PLAYING event
+});
 document.addEventListener('keydown',function(e){
   var k=e.key;
   if(k===' '||k==='Spacebar'||k==='Enter'){e.preventDefault();
@@ -1283,17 +1284,22 @@ import * as THREE from 'three';
 
   var lamp = new THREE.Group(); lamp.add(body);
 
-  /* ---------- five beaks (spouts) + wick-tip markers, fanned across the front ---------- */
-  var markers=[], beakAz=[-1.25,-0.75,-0.25,0.25,0.75,1.25];   /* six beaks fanned across the front */
-  var beakGeo=new THREE.ConeGeometry(0.42*S, 1.5*S, 18);
-  var rimR=10.2*S, rimY=2.55*S, tipR=11.2*S, tipY=3.5*S;
+  /* ---------- six beaks: short broad brass LIPS growing out of the rim (every ~30deg
+     across the front arc, all facing the camera) + a dark wick nub at each tip ---------- */
+  var markers=[], beakAz=[-1.309,-0.785,-0.262,0.262,0.785,1.309];   // -75..+75 deg, 30deg apart
+  // truncated cone: WIDE base (sits in the bowl wall) -> small rounded lip at the tip
+  var beakGeo=new THREE.CylinderGeometry(0.16*S, 0.80*S, 1.5*S, 20);
+  var wickGeo=new THREE.SphereGeometry(0.14*S, 10, 8);
+  var darkWick=new THREE.MeshStandardMaterial({color:0x1a0f06, roughness:0.92, metalness:0.05});
+  var baseR=9.0*S, baseY=2.45*S, tipR=11.55*S, tipY=3.0*S;   // base overlaps the rim; lip just past it, gently up
   for(var b=0;b<beakAz.length;b++){
     var gb=new THREE.Group(); gb.rotation.y=beakAz[b];
-    var cone=new THREE.Mesh(beakGeo, brass);
-    cone.position.set(0, (rimY+tipY)/2, (rimR+tipR)/2);
-    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(0, tipY-rimY, tipR-rimR).normalize());
-    gb.add(cone);
-    var mk=new THREE.Object3D(); mk.position.set(0, tipY, tipR); gb.add(mk);
+    var lip=new THREE.Mesh(beakGeo, brass);                  // same brass -> reads as one casting
+    lip.position.set(0,(baseY+tipY)/2,(baseR+tipR)/2);
+    lip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(0, tipY-baseY, tipR-baseR).normalize());
+    gb.add(lip);
+    var nub=new THREE.Mesh(wickGeo, darkWick); nub.position.set(0, tipY, tipR); gb.add(nub);
+    var mk=new THREE.Object3D(); mk.position.set(0, tipY, tipR); gb.add(mk);   // flame anchors here
     lamp.add(gb); markers.push(mk);
   }
   scene.add(lamp);
@@ -1309,7 +1315,7 @@ import * as THREE from 'three';
   var ctr=box.getCenter(new THREE.Vector3());
   var size=box.getSize(new THREE.Vector3());
   lamp.position.y -= ctr.y;                                   // recentre vertically about origin
-  var bowlY = 2.6*S - ctr.y;                                  // bowl-centre world height after recentre
+  var bowlY = 3.0*S - ctr.y;                                  // flame/lip height (glow + bloom centre here)
   var camDist = (size.y*0.5)/Math.tan((30*Math.PI/360)) * 1.14;
   camera.position.set(0, size.y*0.10, camDist);
   camera.lookAt(0, size.y*0.02, 0);
